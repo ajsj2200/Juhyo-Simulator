@@ -1,12 +1,13 @@
 import InputGroup from './InputGroup';
-import { calculateMonthlyPaymentEqual } from '../utils/calculations';
+import { calculateMonthlyPaymentEqual, getLoanPaymentAtMonth } from '../utils/calculations';
 
 const MarriagePlanSection = ({ marriagePlan, setMarriagePlan, personMonthly }) => {
   const updateSpouse = (updates) => {
-    setMarriagePlan({
-      ...marriagePlan,
-      spouse: { ...marriagePlan.spouse, ...updates },
-    });
+    const next = { ...marriagePlan.spouse, ...updates };
+    const income = Number(next.salary) || 0;
+    const expense = Number(next.expense) || 0;
+    next.monthly = Math.max(0, income - expense);
+    setMarriagePlan({ ...marriagePlan, spouse: next });
   };
 
   const updateLoanAmount = (housePrice, downPayment) => {
@@ -46,6 +47,39 @@ const MarriagePlanSection = ({ marriagePlan, setMarriagePlan, personMonthly }) =
 
   // 대출 중 월 순저축
   const netSavingsDuringLoan = Math.max(0, netSavingsAfterLoan - initialMonthlyPayment);
+
+  // 중도상환 예상 잔액
+  const prepayRemaining =
+    marriagePlan.buyHouse && marriagePlan.prepayEnabled
+      ? (() => {
+          const monthsSinceLoanStart = Math.floor((marriagePlan.prepayYear || 0) * 12);
+          const info = getLoanPaymentAtMonth(
+            marriagePlan.loanAmount,
+            marriagePlan.loanRate,
+            marriagePlan.loanYears,
+            marriagePlan.repaymentType,
+            monthsSinceLoanStart
+          );
+          return Math.max(0, info.remainingPrincipal);
+        })()
+      : 0;
+
+  const effectiveLoanYears = marriagePlan.prepayEnabled
+    ? Math.min(marriagePlan.prepayYear, marriagePlan.loanYears)
+    : marriagePlan.loanYears;
+
+  const addSpouseAdjustment = () => {
+    setMarriagePlan({
+      ...marriagePlan,
+      spouse: {
+        ...marriagePlan.spouse,
+        adjustments: [
+          ...(marriagePlan.spouse.adjustments || []),
+          { year: (marriagePlan.spouse.adjustments?.slice(-1)[0]?.year || 0) + 1, monthly: marriagePlan.spouse.monthly },
+        ],
+      },
+    });
+  };
 
   return (
     <div className="bg-gradient-to-r from-pink-50 to-purple-50 p-6 rounded-lg shadow mb-8 border-2 border-pink-200">
@@ -92,14 +126,41 @@ const MarriagePlanSection = ({ marriagePlan, setMarriagePlan, personMonthly }) =
               />
 
               <InputGroup
-                label="배우자 월 투자액"
-                value={marriagePlan.spouse.monthly}
-                onChange={(v) => updateSpouse({ monthly: v })}
+                label="배우자 세후 월급"
+                value={marriagePlan.spouse.salary}
+                onChange={(v) => updateSpouse({ salary: v })}
                 min={0}
-                max={500}
+                max={2000}
                 step={10}
+                unit="만원/월"
+              />
+
+              <InputGroup
+                label="배우자 초기 자산"
+                value={marriagePlan.spouse.initial || 0}
+                onChange={(v) => updateSpouse({ initial: v })}
+                min={0}
+                max={100000}
+                step={100}
                 unit="만원"
               />
+
+              <InputGroup
+                label="배우자 월 생활비"
+                value={marriagePlan.spouse.expense || 0}
+                onChange={(v) => updateSpouse({ expense: v })}
+                min={0}
+                max={2000}
+                step={10}
+                unit="만원/월"
+              />
+
+              <div className="p-3 bg-purple-50 rounded mb-2">
+                <div className="text-sm text-gray-600">배우자 월 투자 가능액</div>
+                <div className="text-xl font-bold text-purple-700">
+                  {marriagePlan.spouse.monthly}만원
+                </div>
+              </div>
 
               <InputGroup
                 label="배우자 투자액 증가율"
@@ -112,13 +173,13 @@ const MarriagePlanSection = ({ marriagePlan, setMarriagePlan, personMonthly }) =
               />
 
               <InputGroup
-                label="배우자 연봉"
-                value={marriagePlan.spouse.salary}
-                onChange={(v) => updateSpouse({ salary: v })}
+                label="배우자 연 수익률"
+                value={marriagePlan.spouse.rate || 0}
+                onChange={(v) => updateSpouse({ rate: v })}
                 min={0}
-                max={30000}
-                step={100}
-                unit="만원"
+                max={30}
+                step={0.5}
+                unit="%"
               />
 
               <InputGroup
@@ -135,10 +196,71 @@ const MarriagePlanSection = ({ marriagePlan, setMarriagePlan, personMonthly }) =
                 <span className="text-gray-600">배우자 저축률: </span>
                 <span className="font-bold text-purple-600">
                   {marriagePlan.spouse.salary > 0
-                    ? ((marriagePlan.spouse.monthly / (marriagePlan.spouse.salary / 12)) * 100).toFixed(1)
+                    ? ((marriagePlan.spouse.monthly / marriagePlan.spouse.salary) * 100).toFixed(1)
                     : 0}
                   %
                 </span>
+              </div>
+
+              <div className="mt-3">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-sm font-semibold text-gray-700">배우자 저축 변경</h4>
+                  <button
+                    type="button"
+                    className="text-xs px-2 py-1 rounded bg-purple-50 border border-purple-200 text-purple-700"
+                    onClick={addSpouseAdjustment}
+                  >
+                    + 추가
+                  </button>
+                </div>
+                {(marriagePlan.spouse.adjustments || []).length === 0 && (
+                  <div className="text-xs text-gray-500 bg-gray-50 p-2 rounded">
+                    특정 연도부터 투자액을 변경하려면 “+ 추가”를 눌러 입력하세요.
+                  </div>
+                )}
+                <div className="space-y-2">
+                  {(marriagePlan.spouse.adjustments || []).map((adj, idx) => (
+                    <div key={`${idx}-${adj.year}`} className="grid grid-cols-2 gap-2 items-end bg-gray-50 p-2 rounded">
+                      <InputGroup
+                        label="변경 시점(년 후)"
+                        value={adj.year}
+                        onChange={(v) => {
+                          const next = [...marriagePlan.spouse.adjustments];
+                          next[idx] = { ...next[idx], year: v };
+                          updateSpouse({ adjustments: next });
+                        }}
+                        min={0}
+                        max={70}
+                        step={0.5}
+                        unit="년"
+                      />
+                      <InputGroup
+                        label="변경 후 월 투자액"
+                        value={adj.monthly}
+                        onChange={(v) => {
+                          const next = [...marriagePlan.spouse.adjustments];
+                          next[idx] = { ...next[idx], monthly: v };
+                          updateSpouse({ adjustments: next });
+                        }}
+                        min={0}
+                        max={2000}
+                        step={10}
+                        unit="만원"
+                      />
+                      <button
+                        type="button"
+                        className="col-span-2 text-xs text-red-600 hover:underline"
+                        onClick={() => {
+                          const next = [...marriagePlan.spouse.adjustments];
+                          next.splice(idx, 1);
+                          updateSpouse({ adjustments: next });
+                        }}
+                      >
+                        삭제
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -212,6 +334,46 @@ const MarriagePlanSection = ({ marriagePlan, setMarriagePlan, personMonthly }) =
                   unit="년"
                 />
 
+                <div className="flex items-center justify-between border-b pb-2">
+                  <h4 className="font-semibold text-gray-700">중도상환</h4>
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={marriagePlan.prepayEnabled}
+                      onChange={(e) =>
+                        setMarriagePlan({ ...marriagePlan, prepayEnabled: e.target.checked })
+                      }
+                      className="w-4 h-4 text-amber-600 rounded focus:ring-amber-500"
+                    />
+                    <span className="ml-2 text-sm text-amber-700">결혼 후 일시 상환</span>
+                  </label>
+                </div>
+
+                {marriagePlan.prepayEnabled && (
+                  <>
+                    <InputGroup
+                      label="중도상환 시점"
+                      value={marriagePlan.prepayYear}
+                      onChange={(v) =>
+                        setMarriagePlan({
+                          ...marriagePlan,
+                          prepayYear: Math.min(Math.max(0, v), marriagePlan.loanYears),
+                        })
+                      }
+                      min={0}
+                      max={marriagePlan.loanYears}
+                      step={1}
+                      unit="년 (결혼 후)"
+                    />
+                    <div className="p-3 bg-amber-50 rounded text-sm text-amber-800">
+                      예상 잔액: {prepayRemaining.toLocaleString()}만원
+                      <span className="text-xs text-gray-600 ml-2">
+                        (대출 {marriagePlan.prepayYear}년차 기준)
+                      </span>
+                    </div>
+                  </>
+                )}
+
                 <InputGroup
                   label="주택 가격 상승률"
                   value={marriagePlan.houseAppreciationRate}
@@ -260,9 +422,9 @@ const MarriagePlanSection = ({ marriagePlan, setMarriagePlan, personMonthly }) =
                   <div className="text-sm">
                     <span className="text-gray-600">대출 완료 시점: </span>
                     <span className="font-bold text-green-600">
-                      결혼 {marriagePlan.loanYears}년 후
+                      결혼 {effectiveLoanYears}년 후
                       <span className="text-xs font-normal ml-1">
-                        (투자 시작 {marriagePlan.yearOfMarriage + marriagePlan.loanYears}년 후)
+                        (투자 시작 {marriagePlan.yearOfMarriage + effectiveLoanYears}년 후)
                       </span>
                     </span>
                   </div>

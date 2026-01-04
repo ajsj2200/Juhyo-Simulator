@@ -1,83 +1,167 @@
 import InputGroup from './InputGroup';
 
-const PersonCard = ({ person, setPerson, color, showRetirement = false }) => (
-  <div className={`p-6 rounded-lg border-2 ${color} bg-white`}>
-    <input
-      type="text"
-      value={person.name}
-      onChange={(e) => setPerson({ ...person, name: e.target.value })}
-      className="text-xl font-bold mb-4 w-full px-2 py-1 border-b-2 border-gray-300 focus:border-blue-500 focus:outline-none"
-    />
+const PersonCard = ({ person, setPerson, color, showRetirement = false }) => {
+  const updateWithDerivedMonthly = (updates) => {
+    const next = { ...person, ...updates };
+    const income = Number(next.salary) || 0;
+    const expense = Number(next.expense) || 0;
+    next.monthly = Math.max(0, income - expense);
+    setPerson(next);
+  };
 
-    <InputGroup
-      label="초기 자산"
-      value={person.initial}
-      onChange={(v) => setPerson({ ...person, initial: v })}
-      min={0}
-      max={100000}
-      step={100}
-      unit="만원"
-    />
-
-    <InputGroup
-      label="월 투자액"
-      value={person.monthly}
-      onChange={(v) => setPerson({ ...person, monthly: v })}
-      min={0}
-      max={1000}
-      step={10}
-      unit="만원"
-    />
-
-    <InputGroup
-      label="투자액 증가율"
-      value={person.monthlyGrowthRate}
-      onChange={(v) => setPerson({ ...person, monthlyGrowthRate: v })}
-      min={0}
-      max={10}
-      step={0.1}
-      unit="%/년"
-    />
-
-    <InputGroup
-      label="연 수익률"
-      value={person.rate}
-      onChange={(v) => setPerson({ ...person, rate: v })}
-      min={0}
-      max={30}
-      step={0.5}
-      unit="%"
-    />
-
-    <InputGroup
-      label="연봉"
-      value={person.salary}
-      onChange={(v) => setPerson({ ...person, salary: v })}
-      min={0}
-      max={50000}
-      step={100}
-      unit="만원"
-    />
-
-    {showRetirement && (
-      <InputGroup
-        label="은퇴 시점"
-        value={person.retireYear}
-        onChange={(v) => setPerson({ ...person, retireYear: v })}
-        min={1}
-        max={40}
-        step={1}
-        unit="년 후"
+  return (
+    <div className={`p-6 rounded-lg border-2 ${color} bg-white`}>
+      <input
+        type="text"
+        value={person.name}
+        onChange={(e) => setPerson({ ...person, name: e.target.value })}
+        className="text-xl font-bold mb-4 w-full px-2 py-1 border-b-2 border-gray-300 focus:border-blue-500 focus:outline-none"
       />
-    )}
 
-    <div className="mt-4 p-3 bg-gray-50 rounded">
-      <div className="text-sm text-gray-600">저축률</div>
-      <div className="text-2xl font-bold text-blue-600">
-        {person.salary > 0 ? ((person.monthly / (person.salary / 12)) * 100).toFixed(1) : 0}%
+      <InputGroup
+        label="초기 자산"
+        value={person.initial}
+        onChange={(v) => setPerson({ ...person, initial: v })}
+        min={0}
+        max={100000}
+        step={100}
+        unit="만원"
+      />
+
+      <InputGroup
+        label="세후 월급"
+        value={person.salary}
+        onChange={(v) => updateWithDerivedMonthly({ salary: v })}
+        min={0}
+        max={2000}
+        step={10}
+        unit="만원/월"
+      />
+
+      <InputGroup
+        label="월 생활비"
+        value={person.expense || 0}
+        onChange={(v) => updateWithDerivedMonthly({ expense: v })}
+        min={0}
+        max={2000}
+        step={10}
+        unit="만원/월"
+      />
+
+      <div className="p-3 bg-blue-50 rounded mb-2">
+        <div className="text-sm text-gray-600">월 투자 가능액</div>
+        <div className="text-2xl font-bold text-blue-700">{person.monthly}만원</div>
+      </div>
+
+      <InputGroup
+        label="투자액 증가율"
+        value={person.monthlyGrowthRate}
+        onChange={(v) => setPerson({ ...person, monthlyGrowthRate: v })}
+        min={0}
+        max={10}
+        step={0.1}
+        unit="%/년"
+      />
+
+      <InputGroup
+        label="연 수익률"
+        value={person.rate}
+        onChange={(v) => setPerson({ ...person, rate: v })}
+        min={0}
+        max={30}
+        step={0.5}
+        unit="%"
+      />
+
+      {showRetirement && (
+        <InputGroup
+          label="은퇴 시점"
+          value={person.retireYear}
+          onChange={(v) => setPerson({ ...person, retireYear: v })}
+          min={1}
+          max={40}
+          step={1}
+          unit="년 후"
+        />
+      )}
+
+      <div className="mt-4 p-3 bg-gray-50 rounded">
+        <div className="text-sm text-gray-600">저축률</div>
+        <div className="text-2xl font-bold text-blue-600">
+          {person.salary > 0 ? ((person.monthly / person.salary) * 100).toFixed(1) : 0}%
+        </div>
+      </div>
+
+      <div className="mt-4">
+        <div className="flex items-center justify-between mb-2">
+          <h4 className="text-sm font-semibold text-gray-700">저축 변경 스케줄</h4>
+          <button
+            type="button"
+            className="text-xs px-2 py-1 rounded bg-blue-50 border border-blue-200 text-blue-700"
+            onClick={() =>
+              setPerson({
+                ...person,
+                adjustments: [
+                  ...(person.adjustments || []),
+                  { year: (person.adjustments?.slice(-1)[0]?.year || 0) + 1, monthly: person.monthly },
+                ],
+              })
+            }
+          >
+            + 추가
+          </button>
+        </div>
+        {(person.adjustments || []).length === 0 && (
+          <div className="text-xs text-gray-500 bg-gray-50 p-2 rounded">
+            특정 연도부터 투자액을 변경하려면 “+ 추가”를 눌러 입력하세요.
+          </div>
+        )}
+        <div className="space-y-2">
+          {(person.adjustments || []).map((adj, idx) => (
+            <div key={`${idx}-${adj.year}`} className="grid grid-cols-2 gap-2 items-end bg-gray-50 p-2 rounded">
+              <InputGroup
+                label="변경 시점(년 후)"
+                value={adj.year}
+                onChange={(v) => {
+                  const next = [...person.adjustments];
+                  next[idx] = { ...next[idx], year: v };
+                  setPerson({ ...person, adjustments: next });
+                }}
+                min={0}
+                max={70}
+                step={0.5}
+                unit="년"
+              />
+              <InputGroup
+                label="변경 후 월 투자액"
+                value={adj.monthly}
+                onChange={(v) => {
+                  const next = [...person.adjustments];
+                  next[idx] = { ...next[idx], monthly: v };
+                  setPerson({ ...person, adjustments: next });
+                }}
+                min={0}
+                max={2000}
+                step={10}
+                unit="만원"
+              />
+              <button
+                type="button"
+                className="col-span-2 text-xs text-red-600 hover:underline"
+                onClick={() => {
+                  const next = [...person.adjustments];
+                  next.splice(idx, 1);
+                  setPerson({ ...person, adjustments: next });
+                }}
+              >
+                삭제
+              </button>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 export default PersonCard;

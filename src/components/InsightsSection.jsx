@@ -12,8 +12,8 @@ const InsightsSection = ({
   crossoverYear,
   youIncome,
   years,
-  retirementPlan,
   jepqFinancialIndependenceYear,
+  loanCompletionYear,
 }) => {
   const initialMonthlyPayment = marriagePlan.buyHouse
     ? calculateMonthlyPaymentEqual(marriagePlan.loanAmount, marriagePlan.loanRate, marriagePlan.loanYears)
@@ -41,12 +41,12 @@ const InsightsSection = ({
           )}
         </p>
         <p>
-          • 연봉 차이: <strong>{Math.abs(you.salary - other.salary).toLocaleString()}만원</strong>{' '}
+          • 세후 월급 차이: <strong>{Math.abs(you.salary - other.salary).toLocaleString()}만원</strong>{' '}
           ({you.salary > other.salary ? you.name : other.name}이 더 높음)
         </p>
         <p>
-          • 월 저축 차이: <strong>{Math.abs(you.monthly - other.monthly)}만원</strong>{' '}
-          ({you.monthly > other.monthly ? you.name : other.name}이 더 많이 저축)
+          • 월 투자액 차이: <strong>{Math.abs(you.monthly - other.monthly)}만원</strong>{' '}
+          ({you.monthly > other.monthly ? you.name : other.name}이 더 많이 투자)
         </p>
 
         {marriagePlan.enabled && (
@@ -79,8 +79,8 @@ const InsightsSection = ({
                   {marriagePlan.loanYears}년 상환
                 </p>
                 <p className="ml-4 text-sm text-green-600 font-semibold">
-                  • 대출 완료: 결혼 {marriagePlan.loanYears}년 후 (투자 시작{' '}
-                  {marriagePlan.yearOfMarriage + marriagePlan.loanYears}년 후)
+                  • 대출 완료: 결혼 {loanCompletionYear - marriagePlan.yearOfMarriage}년 후 (투자 시작{' '}
+                  {loanCompletionYear}년 후)
                 </p>
               </>
             )}

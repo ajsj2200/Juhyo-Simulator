@@ -1,8 +1,24 @@
 import { PRESETS } from '../constants/defaults';
 
-const PresetButtons = ({ onApplyPreset }) => (
+const PresetButtons = ({ onApplyPreset, useCompound, onToggleCompound }) => (
   <div className="bg-white p-4 rounded-lg shadow mb-4">
-    <h3 className="text-sm font-semibold text-gray-700 mb-3">📊 비교 대상 프리셋 (통계 기반)</h3>
+    <div className="flex items-center justify-between mb-3">
+      <h3 className="text-sm font-semibold text-gray-700">📊 비교 대상 프리셋 (통계 기반)</h3>
+      <label className="inline-flex items-center gap-2 text-xs">
+        <span className="text-gray-600">수익 계산</span>
+        <button
+          onClick={() => onToggleCompound(!useCompound)}
+          className={`px-2 py-1 rounded border text-xs ${
+            useCompound
+              ? 'bg-blue-100 border-blue-300 text-blue-700'
+              : 'bg-amber-100 border-amber-300 text-amber-700'
+          }`}
+          type="button"
+        >
+          {useCompound ? '복리' : '단리'}
+        </button>
+      </label>
+    </div>
     <div className="grid grid-cols-2 gap-2">
       <button
         onClick={() => onApplyPreset('average')}

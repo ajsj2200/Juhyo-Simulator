@@ -13,13 +13,19 @@ import {
   PRESETS,
   DEFAULT_MARRIAGE_PLAN,
   DEFAULT_RETIREMENT_PLAN,
+  DEFAULT_CRISIS_SCENARIO,
 } from './constants/defaults';
 import {
   calculateWealthWithMarriage,
   calculateWealth,
   calculateSavingsRate,
   calculateMonthlyPaymentEqual,
+  calculateHouseValue,
+  getLoanPaymentAtMonth,
+  generateLoanSchedule,
 } from './utils/calculations';
+import InputGroup from './components/InputGroup';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 const InvestmentCalculator = () => {
   // 본인 정보 (은퇴 시점 포함)
@@ -37,25 +43,128 @@ const InvestmentCalculator = () => {
   // 은퇴 계획
   const [retirementPlan, setRetirementPlan] = useState(DEFAULT_RETIREMENT_PLAN);
 
+  // 위기 시나리오 (대공황 가정)
+  const [crisis, setCrisis] = useState(DEFAULT_CRISIS_SCENARIO);
+  // 비교 대상 복리/단리 (본인은 복리 고정)
+  const [otherUseCompound, setOtherUseCompound] = useState(true);
+  // 차트 로그 스케일
+  const [useLogScale, setUseLogScale] = useState(true);
+  // 단독 대출 계산기 입력
+  const [loanCalc, setLoanCalc] = useState({
+    amount: marriagePlan.loanAmount,
+    rate: marriagePlan.loanRate,
+    years: marriagePlan.loanYears,
+    type: marriagePlan.repaymentType,
+    inflation: retirementPlan.inflationRate,
+  });
+  // 자산 차트 실질가치 모드
+  const [useRealAsset, setUseRealAsset] = useState(false);
+
   // 프리셋 적용
   const applyPreset = (presetName) => {
-    setOther(PRESETS[presetName]);
+    const preset = PRESETS[presetName];
+    if (!preset) return;
+
+    setOther((prev) => ({
+      ...prev,
+      ...preset,
+    }));
+
+    // 프리셋 적용 시 은퇴/주택 구매 시나리오도 자동 활성화
+    setRetirementPlan((prev) => ({ ...prev, enabled: true }));
+    setMarriagePlan((prev) => ({
+      ...prev,
+      enabled: true,
+      buyHouse: true,
+      loanAmount: prev.housePrice && prev.downPayment
+        ? Math.max(0, prev.housePrice - prev.downPayment)
+        : prev.loanAmount,
+    }));
   };
 
   // 차트 데이터 계산
   const chartData = useMemo(() => {
     const data = [];
     for (let year = 0; year <= years; year++) {
+      const houseValue =
+        marriagePlan.buyHouse && marriagePlan.enabled
+          ? calculateHouseValue(marriagePlan, year) / 10000
+          : 0;
+      const spouseOnlyWealth =
+        marriagePlan.enabled && year < marriagePlan.yearOfMarriage
+          ? calculateWealth(
+              marriagePlan.spouse.initial || 0,
+              marriagePlan.spouse.monthly,
+              marriagePlan.spouse.rate || you.rate,
+              year,
+              marriagePlan.spouse.monthlyGrowthRate,
+              { retireYear: marriagePlan.spouse.retireYear },
+              null,
+              crisis,
+              otherUseCompound
+            ) / 10000
+          : null;
       data.push({
         year,
         you:
-          calculateWealthWithMarriage(you, year, marriagePlan, retirementPlan) / 10000,
-        youNoMarriage: calculateWealth(you.initial, you.monthly, you.rate, year, you.monthlyGrowthRate, you, retirementPlan) / 10000,
-        other: calculateWealth(other.initial, other.monthly, other.rate, year, other.monthlyGrowthRate, other, retirementPlan) / 10000,
+          calculateWealthWithMarriage(you, year, marriagePlan, retirementPlan, crisis, true) / 10000,
+        youNoMarriage: calculateWealth(
+          you.initial,
+          you.monthly,
+          you.rate,
+          year,
+          you.monthlyGrowthRate,
+          you,
+          retirementPlan,
+          crisis,
+          true
+        ) / 10000,
+        other: calculateWealth(
+          other.initial,
+          other.monthly,
+          other.rate,
+          year,
+          other.monthlyGrowthRate,
+          other,
+          retirementPlan,
+          crisis,
+          otherUseCompound
+        ) / 10000,
+        house: houseValue,
+        spouseWealth: spouseOnlyWealth,
       });
     }
     return data;
-  }, [you, other, years, marriagePlan, retirementPlan]);
+  }, [you, other, years, marriagePlan, retirementPlan, crisis, otherUseCompound]);
+
+  const loanCalcResult = useMemo(() => {
+    const { amount, rate, years, type } = loanCalc;
+    if (amount <= 0 || years <= 0) return null;
+
+    const schedule =
+      type === 'equalPayment'
+        ? generateLoanSchedule(amount, rate, years, type)
+        : generateLoanSchedule(amount, rate, years, type);
+
+    const monthly = schedule[0]?.payment || 0;
+    const after1Year = schedule[12]?.payment || monthly;
+    const after5Year = schedule[60]?.payment || after1Year;
+    return { monthly, after1Year, after5Year, schedule };
+  }, [loanCalc]);
+
+  const loanChartData = useMemo(() => {
+    if (!loanCalcResult?.schedule) return [];
+    const inflMonthly = (loanCalc.inflation || 0) / 100 / 12;
+    return loanCalcResult.schedule.map((row) => {
+      const month = row.month + 1;
+      const realPayment = row.payment / Math.pow(1 + inflMonthly, row.month);
+      return {
+        month,
+        payment: row.payment,
+        realPayment,
+      };
+    });
+  }, [loanCalcResult, loanCalc.inflation]);
 
   // 최종 결과
   const finalYou = chartData[years]?.you || 0;
@@ -114,6 +223,28 @@ const InvestmentCalculator = () => {
     return null;
   }, [chartData, years, retirementPlan, effectiveRetireYear]);
 
+  const effectiveLoanYears = marriagePlan.prepayEnabled
+    ? Math.min(marriagePlan.prepayYear, marriagePlan.loanYears)
+    : marriagePlan.loanYears;
+  const loanCompletionYear = marriagePlan.yearOfMarriage + effectiveLoanYears;
+  const houseValueFinal =
+    marriagePlan.buyHouse && marriagePlan.enabled ? calculateHouseValue(marriagePlan, years) / 10000 : 0;
+  const remainingLoanFinal =
+    marriagePlan.buyHouse && marriagePlan.enabled && years >= marriagePlan.yearOfMarriage
+      ? (() => {
+          if (years >= loanCompletionYear) return 0;
+          const monthsSinceLoan = Math.floor((years - marriagePlan.yearOfMarriage) * 12);
+          const info = getLoanPaymentAtMonth(
+            marriagePlan.loanAmount,
+            marriagePlan.loanRate,
+            marriagePlan.loanYears,
+            marriagePlan.repaymentType,
+            monthsSinceLoan
+          );
+          return Math.max(0, info.remainingPrincipal) / 10000; // 억 단위
+        })()
+      : 0;
+
   // 복사 기능
   const [copied, setCopied] = useState(false);
 
@@ -146,11 +277,13 @@ const InvestmentCalculator = () => {
 
 👫 배우자 정보
 • 이름: ${marriagePlan.spouse.name}
-• 연봉: ${marriagePlan.spouse.salary.toLocaleString()}만원
+• 세후 월급: ${marriagePlan.spouse.salary.toLocaleString()}만원
+• 월 생활비: ${marriagePlan.spouse.expense?.toLocaleString?.() || marriagePlan.spouse.expense}만원
 • 월 투자액: ${marriagePlan.spouse.monthly.toLocaleString()}만원
 • 투자액 증가율: ${marriagePlan.spouse.monthlyGrowthRate}%/년
-• 저축률: ${((marriagePlan.spouse.monthly / (marriagePlan.spouse.salary / 12)) * 100).toFixed(1)}%
+• 저축률: ${((marriagePlan.spouse.monthly / marriagePlan.spouse.salary) * 100).toFixed(1)}%
 • 은퇴 시점: ${marriagePlan.spouse.retireYear}년 후
+${marriagePlan.spouse.adjustments?.length ? `• 투자액 변경: ${marriagePlan.spouse.adjustments.map((a) => `${a.year}년→${a.monthly}만원`).join(', ')}` : ''}
 ${
   marriagePlan.buyHouse
     ? `
@@ -159,11 +292,13 @@ ${
 • 자기자본: ${marriagePlan.downPayment.toLocaleString()}만원
 • 대출금액: ${marriagePlan.loanAmount.toLocaleString()}만원 (${(marriagePlan.loanAmount / 10000).toFixed(1)}억원)
 • 대출 금리: ${marriagePlan.loanRate}%
-• 대출 기간: ${marriagePlan.loanYears}년
+• 대출 기간: ${marriagePlan.loanYears}년${marriagePlan.prepayEnabled ? ` (중도상환: 결혼 ${marriagePlan.prepayYear}년 후 일시상환)` : ''}
 • 상환방식: ${marriagePlan.repaymentType === 'equalPayment' ? '원리금균등' : marriagePlan.repaymentType === 'equalPrincipal' ? '원금균등' : '체증식'}
 • 초기 월 상환액: ${initialMonthlyPayment.toFixed(0)}만원
 • 주택 가격 상승률: ${marriagePlan.houseAppreciationRate}%/년
-• 대출 완료: 결혼 ${marriagePlan.loanYears}년 후 (투자 시작 ${marriagePlan.yearOfMarriage + marriagePlan.loanYears}년 후)`
+• 대출 완료: 결혼 ${effectiveLoanYears}년 후 (투자 시작 ${loanCompletionYear}년 후)
+• 현재 집 가치: ${houseValueFinal.toFixed(2)}억
+• 대출 잔액: ${remainingLoanFinal.toFixed(2)}억`
     : `
 • 주택 구매: X`
 }
@@ -209,6 +344,17 @@ ${retirementPlan.useJEPQ ? `• JEPQ 성장률: 2%/년 (고정)` : ''}
 ${jepqFinancialIndependenceYear !== null ? `\n💰 JEPQ 경제적 자유\n• ${jepqFinancialIndependenceYear}년 후부터 JEPQ 배당금만으로 생활비 충당 가능!\n• 이후 배우자는 조기 은퇴 가능` : ''}
 `
       : '';
+    
+    const crisisInfo = crisis.enabled
+      ? `
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚠️ 위기 시나리오 (대공황 가정)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• 시작: ${crisis.startYear}년 후
+• 지속: ${crisis.duration}년
+• 연간 하락률: ${crisis.drawdownRate}%`
+      : '';
 
     const text = `
 🎯 투자 비교 결과 (${years}년)
@@ -216,14 +362,17 @@ ${jepqFinancialIndependenceYear !== null ? `\n💰 JEPQ 경제적 자유\n• ${
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📊 ${you.name}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• 연봉: ${you.salary.toLocaleString()}만원
+• 세후 월급: ${you.salary.toLocaleString()}만원
+• 월 생활비: ${you.expense?.toLocaleString?.() || you.expense}만원
 • 초기 자산: ${you.initial.toLocaleString()}만원
 • 월 투자액: ${you.monthly.toLocaleString()}만원
 • 투자액 증가율: ${you.monthlyGrowthRate}%/년
 • 연 수익률: ${you.rate}%
 • 저축률: ${youSavingsRate}%
 • 은퇴 시점: ${you.retireYear}년 후
+${you.adjustments?.length ? `• 투자액 변경: ${you.adjustments.map((a) => `${a.year}년→${a.monthly}만원`).join(', ')}` : ''}
 ${marriageInfo}${retirementInfo}
+${crisisInfo}
 ${years}년 후:
 • 총 자산: ${finalYou.toFixed(2)}억원
 • 연 자산소득: ${youIncome.toFixed(0)}만원 (월 ${(youIncome / 12).toFixed(0)}만원)
@@ -231,12 +380,14 @@ ${years}년 후:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📊 ${other.name}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• 연봉: ${other.salary.toLocaleString()}만원
+• 세후 월급: ${other.salary.toLocaleString()}만원
+• 월 생활비: ${other.expense?.toLocaleString?.() || other.expense}만원
 • 초기 자산: ${other.initial.toLocaleString()}만원
 • 월 투자액: ${other.monthly.toLocaleString()}만원
 • 투자액 증가율: ${other.monthlyGrowthRate}%/년
 • 연 수익률: ${other.rate}%
 • 저축률: ${otherSavingsRate}%
+${other.adjustments?.length ? `• 투자액 변경: ${other.adjustments.map((a) => `${a.year}년→${a.monthly}만원`).join(', ')}` : ''}
 
 ${years}년 후:
 • 총 자산: ${finalOther.toFixed(2)}억원
@@ -246,8 +397,8 @@ ${years}년 후:
 💰 비교 결과
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 • 자산 차이: ${difference >= 0 ? '+' : ''}${difference.toFixed(2)}억원 (${((finalYou / finalOther - 1) * 100).toFixed(1)}%)
-• 연봉 차이: ${you.salary > other.salary ? you.name : other.name}이 ${Math.abs(you.salary - other.salary).toLocaleString()}만원 더 높음
-• 월 저축 차이: ${you.monthly > other.monthly ? you.name : other.name}이 ${Math.abs(you.monthly - other.monthly).toLocaleString()}만원 더 많이 저축
+• 세후 월급 차이: ${you.salary > other.salary ? you.name : other.name}이 ${Math.abs(you.salary - other.salary).toLocaleString()}만원 더 높음
+• 월 투자액 차이: ${you.monthly > other.monthly ? you.name : other.name}이 ${Math.abs(you.monthly - other.monthly).toLocaleString()}만원 더 많이 투자
 • 수익률 차이: ${you.rate > other.rate ? you.name : other.name}이 ${Math.abs(you.rate - other.rate).toFixed(1)}%p 더 높음
 ${crossoverYear !== null ? `• 추월 시점: ${crossoverYear}년 후 ${finalYou > finalOther ? you.name : other.name}이 역전` : ''}
 
@@ -271,11 +422,12 @@ ${chartData.map((data, idx) => {
 
 주요 시점:
 ${marriagePlan.enabled ? `• ${marriagePlan.yearOfMarriage}년: 결혼` : ''}
-${marriagePlan.enabled && marriagePlan.buyHouse ? `• ${marriagePlan.yearOfMarriage + marriagePlan.loanYears}년: 대출 완료` : ''}
+${marriagePlan.enabled && marriagePlan.buyHouse ? `• ${loanCompletionYear}년: 대출 완료` : ''}
 ${retirementPlan.enabled ? `• ${you.retireYear}년: 본인 은퇴` : ''}
 ${retirementPlan.enabled && marriagePlan.enabled ? `• ${marriagePlan.spouse.retireYear}년: 배우자 은퇴` : ''}
 ${crossoverYear !== null ? `• ${crossoverYear}년: ${you.name} 역전` : ''}
 ${jepqFinancialIndependenceYear !== null ? `• ${jepqFinancialIndependenceYear}년: JEPQ 경제적 자유` : ''}
+${marriagePlan.spouse.adjustments?.length ? `• 배우자 투자액 변경: ${marriagePlan.spouse.adjustments.map((a) => `${a.year}년→${a.monthly}만원`).join(', ')}` : ''}
 `;
 
     navigator.clipboard.writeText(text).then(() => {
@@ -288,8 +440,8 @@ ${jepqFinancialIndependenceYear !== null ? `• ${jepqFinancialIndependenceYear}
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-8">
       <div className="max-w-7xl mx-auto">
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-800 mb-2">💰 투자 비교 계산기</h1>
-          <p className="text-gray-600">복리의 마법을 직접 확인해보세요</p>
+          <h1 className="text-4xl font-bold text-gray-800 mb-2">💰 주효 인생 시뮬레이터</h1>
+          <p className="text-gray-600">세후 월급/생활비, 단리·복리, 대공황까지 한 번에 비교하세요</p>
           <button
             onClick={copyResults}
             className={`mt-4 px-6 py-3 rounded-lg font-semibold transition-all duration-200 ${
@@ -306,32 +458,214 @@ ${jepqFinancialIndependenceYear !== null ? `• ${jepqFinancialIndependenceYear}
             person={you}
             setPerson={setYou}
             color="border-blue-500"
-            showRetirement={retirementPlan.enabled}
+            showRetirement
           />
 
           <div>
-            <PresetButtons onApplyPreset={applyPreset} />
+            <PresetButtons
+              onApplyPreset={applyPreset}
+              useCompound={otherUseCompound}
+              onToggleCompound={setOtherUseCompound}
+            />
             <PersonCard person={other} setPerson={setOther} color="border-red-500" />
           </div>
         </div>
 
-        {/* 기간 슬라이더 */}
-        <div className="bg-white p-6 rounded-lg shadow mb-8">
-          <label className="block text-lg font-medium text-gray-700 mb-4">
-            투자 기간: {years}년
-          </label>
-          <input
-            type="range"
-            min="1"
-            max="40"
-            value={years}
-            onChange={(e) => setYears(Number(e.target.value))}
-            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-          />
-          <div className="flex justify-between text-sm text-gray-600 mt-2">
-            <span>1년</span>
-            <span>20년</span>
-            <span>40년</span>
+        {/* 대출 계산기 */}
+        <div className="bg-white p-6 rounded-lg shadow mb-8 border border-gray-100">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-lg font-bold text-gray-800">🧮 대출 상환 계산기</h3>
+              <p className="text-sm text-gray-500">대출액/금리/기간/방식을 넣고 월 상환액을 확인하세요.</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <InputGroup
+              label="대출액"
+              value={loanCalc.amount}
+              onChange={(v) => setLoanCalc((prev) => ({ ...prev, amount: v }))}
+              min={0}
+              max={200000}
+              step={100}
+              unit="만원"
+            />
+            <InputGroup
+              label="금리"
+              value={loanCalc.rate}
+              onChange={(v) => setLoanCalc((prev) => ({ ...prev, rate: v }))}
+              min={0}
+              max={20}
+              step={0.1}
+              unit="%"
+            />
+            <InputGroup
+              label="기간"
+              value={loanCalc.years}
+              onChange={(v) => setLoanCalc((prev) => ({ ...prev, years: v }))}
+              min={1}
+              max={40}
+              step={1}
+              unit="년"
+            />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">상환 방식</label>
+              <select
+                value={loanCalc.type}
+                onChange={(e) => setLoanCalc((prev) => ({ ...prev, type: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="equalPayment">원리금균등</option>
+                <option value="equalPrincipal">원금균등</option>
+                <option value="increasing">체증식</option>
+              </select>
+            </div>
+            <InputGroup
+              label="물가상승률"
+              value={loanCalc.inflation}
+              onChange={(v) => setLoanCalc((prev) => ({ ...prev, inflation: v }))}
+              min={0}
+              max={10}
+              step={0.1}
+              unit="%/년 (실질 상환액 계산)"
+            />
+          </div>
+          {loanCalcResult && (
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="p-3 bg-blue-50 border border-blue-100 rounded">
+                <div className="text-xs text-gray-600">초기 월 상환액</div>
+                <div className="text-xl font-bold text-blue-700">
+                  {loanCalcResult.monthly.toFixed(0).toLocaleString()}만원
+                </div>
+              </div>
+              <div className="p-3 bg-gray-50 border border-gray-100 rounded">
+                <div className="text-xs text-gray-600">1년차 월 상환액</div>
+                <div className="text-xl font-bold text-gray-800">
+                  {loanCalcResult.after1Year.toFixed(0).toLocaleString()}만원
+                </div>
+              </div>
+              <div className="p-3 bg-gray-50 border border-gray-100 rounded">
+                <div className="text-xs text-gray-600">5년차 월 상환액</div>
+                <div className="text-xl font-bold text-gray-800">
+                  {loanCalcResult.after5Year.toFixed(0).toLocaleString()}만원
+                </div>
+              </div>
+            </div>
+          )}
+          {loanChartData.length > 0 && (
+            <div className="mt-4 h-56">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={loanChartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis
+                    dataKey="month"
+                    tick={{ fontSize: 10 }}
+                    label={{ value: '개월', position: 'insideBottomRight', offset: -5, fontSize: 11 }}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 10 }}
+                    tickFormatter={(v) => v.toFixed(0)}
+                    label={{ value: '상환액(만원)', angle: -90, position: 'insideLeft', fontSize: 11 }}
+                  />
+                  <Tooltip
+                    formatter={(value, _name, props) => [
+                      `${Number(value).toFixed(0)}만원`,
+                      props?.dataKey === 'payment' ? '명목' : '실질',
+                    ]}
+                    labelFormatter={(l) => `${l}개월차`}
+                  />
+                  <Line type="monotone" dataKey="payment" stroke="#2563eb" strokeWidth={2} name="명목 상환액" dot={false} />
+                  <Line type="monotone" dataKey="realPayment" stroke="#f97316" strokeWidth={2} name="실질 상환액" dot={false} strokeDasharray="5 3" />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
+
+        {/* 기간 슬라이더 + 위기 시나리오 */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-8">
+          <div className="bg-white p-6 rounded-lg shadow lg:col-span-2">
+            <label className="block text-lg font-medium text-gray-700 mb-4">
+              투자 기간: {years}년
+            </label>
+            <input
+              type="range"
+              min="1"
+              max="70"
+              value={years}
+              onChange={(e) => setYears(Number(e.target.value))}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+            />
+            <div className="flex justify-between text-sm text-gray-600 mt-2">
+              <span>1년</span>
+              <span>35년</span>
+              <span>70년</span>
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-lg shadow border border-amber-100">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="text-sm font-semibold text-gray-700">위기 시나리오 (대공황)</p>
+                <p className="text-xs text-gray-500">특정 기간 동안 큰 하락률을 적용합니다.</p>
+              </div>
+              <label className="inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="sr-only"
+                  checked={crisis.enabled}
+                  onChange={(e) => setCrisis((prev) => ({ ...prev, enabled: e.target.checked }))}
+                />
+                <div
+                  className={`w-11 h-6 rounded-full transition-all ${
+                    crisis.enabled ? 'bg-amber-500' : 'bg-gray-300'
+                  }`}
+                >
+                  <div
+                    className={`w-5 h-5 bg-white rounded-full shadow transform transition-transform ${
+                      crisis.enabled ? 'translate-x-5' : 'translate-x-1'
+                    }`}
+                  />
+                </div>
+              </label>
+            </div>
+            <div className={`${crisis.enabled ? 'opacity-100' : 'opacity-60'} space-y-2`}>
+              <InputGroup
+                label="충격 시작 시점"
+                value={crisis.startYear}
+                onChange={(val) =>
+                  setCrisis((prev) => ({ ...prev, startYear: Math.max(0, val) }))
+                }
+                min={0}
+                max={40}
+                step={1}
+                unit="년 후"
+              />
+              <InputGroup
+                label="충격 지속 기간"
+                value={crisis.duration}
+                onChange={(val) =>
+                  setCrisis((prev) => ({ ...prev, duration: Math.max(1, val) }))
+                }
+                min={1}
+                max={40}
+                step={1}
+                unit="년"
+              />
+              <InputGroup
+                label="연간 하락률"
+                value={crisis.drawdownRate}
+                onChange={(val) =>
+                  setCrisis((prev) => ({ ...prev, drawdownRate: Math.min(-1, val) }))
+                }
+                min={-90}
+                max={0}
+                step={1}
+                unit="%"
+              />
+              <p className="text-[11px] text-gray-500">
+                예시) 1년차 시작, 3년 동안 -30%면 1929년 대공황 비슷한 궤적을 가정합니다.
+              </p>
+            </div>
           </div>
         </div>
 
@@ -421,6 +755,13 @@ ${jepqFinancialIndependenceYear !== null ? `• ${jepqFinancialIndependenceYear}
           personRetireYear={you.retireYear}
           spouseRetireYear={marriagePlan.spouse.retireYear}
           jepqFinancialIndependenceYear={jepqFinancialIndependenceYear}
+          crisis={crisis}
+          useLogScale={useLogScale}
+          onToggleLogScale={setUseLogScale}
+          useCompound={otherUseCompound}
+          useRealAsset={useRealAsset}
+          onToggleRealAsset={setUseRealAsset}
+          inflationRate={retirementPlan.inflationRate}
         />
 
         {/* 인사이트 */}
@@ -438,6 +779,7 @@ ${jepqFinancialIndependenceYear !== null ? `• ${jepqFinancialIndependenceYear}
           years={years}
           retirementPlan={retirementPlan}
           jepqFinancialIndependenceYear={jepqFinancialIndependenceYear}
+          loanCompletionYear={loanCompletionYear}
         />
 
         {/* 푸터 */}

@@ -67,7 +67,7 @@ export const PRESETS = {
 };
 
 export const DEFAULT_MARRIAGE_PLAN = {
-  enabled: false,
+  enabled: true,
   yearOfMarriage: 2,
   spouse: {
     name: '배우자',
@@ -80,7 +80,7 @@ export const DEFAULT_MARRIAGE_PLAN = {
     monthlyGrowthRate: 3.0, // 월 투자액 연간 증가율 (%)
     adjustments: [],
   },
-  buyHouse: false,
+  buyHouse: true,
   housePrice: 45000, // 만원
   downPayment: 10000, // 초기 자기자본 (만원)
   loanAmount: 35000, // 대출금 (자동 계산: housePrice - downPayment)
@@ -93,7 +93,7 @@ export const DEFAULT_MARRIAGE_PLAN = {
 };
 
 export const DEFAULT_RETIREMENT_PLAN = {
-  enabled: false,
+  enabled: true,
   withdrawalRate: 4.0,
   monthlyExpense: 300,
   inflationRate: 2.0,

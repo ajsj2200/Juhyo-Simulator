@@ -22,10 +22,56 @@ export const calculateMonthlyPaymentPrincipal = (principal, annualRate, years, c
   const monthlyPrincipal = principal / months;
 
   // 남은 원금에 대한 이자
-  const remainingPrincipal = principal - (monthlyPrincipal * currentMonth);
+  const remainingPrincipal = principal - monthlyPrincipal * currentMonth;
   const interest = Math.max(0, remainingPrincipal) * monthlyRate;
 
   return monthlyPrincipal + interest;
+};
+
+// 체증식(매월 납입액 증가) 스케줄 생성: 첫 달 이자 수준에서 시작해 월 성장률을 이진탐색으로 찾아 만기에 원금이 0이 되도록 함
+const buildIncreasingSchedule = (loanAmount, annualRate, loanYears) => {
+  const months = loanYears * 12;
+  if (loanAmount <= 0 || months <= 0) return [];
+  const monthlyRate = annualRate / 100 / 12;
+  const initialPayment = loanAmount * monthlyRate; // 첫 달은 이자 수준
+
+  const simulate = (growth) => {
+    let remaining = loanAmount;
+    const schedule = [];
+    for (let m = 0; m < months; m++) {
+      const payment = initialPayment * Math.pow(1 + growth, m);
+      const interest = remaining * monthlyRate;
+      const principal = Math.min(Math.max(0, payment - interest), remaining);
+      remaining -= principal;
+      schedule.push({
+        month: m,
+        payment,
+        principal,
+        interest,
+        remainingPrincipal: remaining,
+      });
+    }
+    return { remaining, schedule };
+  };
+
+  let low = 0;
+  let high = 0.02; // 월 0~2% 성장 (연 약 0~27%)
+  let bestSchedule = simulate(high).schedule;
+
+  for (let i = 0; i < 40; i++) {
+    const mid = (low + high) / 2;
+    const { remaining, schedule } = simulate(mid);
+    if (remaining > 0) {
+      // 덜 갚았음 -> 성장률을 높인다
+      low = mid;
+    } else {
+      // 초과 상환 -> 성장률을 낮춘다
+      bestSchedule = schedule;
+      high = mid;
+    }
+  }
+
+  return bestSchedule;
 };
 
 // 대출 상환 스케줄 생성
@@ -48,13 +94,8 @@ export const generateLoanSchedule = (loanAmount, annualRate, loanYears, repaymen
       principal = loanAmount / months;
       interest = remainingPrincipal * monthlyRate;
       payment = principal + interest;
-    } else {
-      // 체증식 (increasing) - 초기 이자만, 점차 증가
-      interest = remainingPrincipal * monthlyRate;
-      // 원금 상환은 시간이 지날수록 증가 (간단한 선형 증가 모델)
-      const progressRatio = month / months;
-      principal = (loanAmount / months) * progressRatio * 2; // 평균적으로 전체 원금 상환
-      payment = principal + interest;
+    } else if (repaymentType === 'increasing') {
+      return buildIncreasingSchedule(loanAmount, annualRate, loanYears);
     }
 
     remainingPrincipal = Math.max(0, remainingPrincipal - principal);
@@ -120,19 +161,11 @@ export const getLoanPaymentAtMonth = (
       isComplete: false,
     };
   } else {
-    // 체증식 (increasing) - 남은 원금 계산
-    let remainingPrincipal = loanAmount;
-    for (let i = 0; i < monthsSinceLoanStart; i++) {
-      const progressRatio = i / totalMonths;
-      const principal = (loanAmount / totalMonths) * progressRatio * 2;
-      remainingPrincipal -= principal;
-    }
-    remainingPrincipal = Math.max(0, remainingPrincipal);
-
-    const interest = remainingPrincipal * monthlyRate;
-    const progressRatio = monthsSinceLoanStart / totalMonths;
-    const principal = (loanAmount / totalMonths) * progressRatio * 2;
-    const payment = principal + interest;
+    // 체증식 (increasing) - 사전 계산된 스케줄 사용
+    const schedule = buildIncreasingSchedule(loanAmount, annualRate, loanYears);
+    const row = schedule[Math.min(monthsSinceLoanStart, schedule.length - 1)];
+    const remainingPrincipal = row ? row.remainingPrincipal : 0;
+    const payment = row ? row.payment : 0;
 
     return {
       payment,
@@ -153,116 +186,123 @@ export const calculateWealthWithMarriage = (
   crisis,
   useCompound = true
 ) => {
-  let wealth = person.initial;
-  let principalBase = wealth; // 단리 계산 시 사용
-  const monthlyRate = person.rate / 100 / 12;
+  let youWealth = person.initial;
+  let spouseWealth = 0;
+  let principalYou = youWealth;
+  let principalSpouse = 0;
+  const youRateMonthly = person.rate / 100 / 12;
+  const spouseRateMonthly = (marriage.spouse.rate ?? person.rate) / 100 / 12;
   const crisisActive = (currentYear) =>
     crisis?.enabled &&
     currentYear >= crisis.startYear &&
     currentYear < crisis.startYear + crisis.duration;
   const prepayMonths = Math.floor((marriage.prepayYear || marriage.loanYears) * 12);
   let loanPaidOff = false;
-  let spouseInitialAdded = false;
-  
+  let spouseInitialMerged = false;
+  let houseValue = marriage.buyHouse && marriage.enabled ? marriage.housePrice : 0;
+  const houseAppreciationMonthlyRate = marriage.buyHouse && marriage.enabled 
+    ? marriage.houseAppreciationRate / 100 / 12 
+    : 0;
+  let downPaymentDeducted = !marriage.buyHouse;
+
   // 월 투자액 (매년 증가)
   let personMonthly = person.monthly;
   let spouseMonthly = marriage.spouse.monthly;
   const personGrowthRate = (person.monthlyGrowthRate || 0) / 100;
   const spouseGrowthRate = (marriage.spouse.monthlyGrowthRate || 0) / 100;
-  
-  // 주택 가치 (구매 시점의 가격으로 시작)
-  let houseValue = marriage.buyHouse && marriage.enabled ? marriage.housePrice : 0;
-  const houseAppreciationMonthlyRate = marriage.buyHouse && marriage.enabled 
-    ? marriage.houseAppreciationRate / 100 / 12 
-    : 0;
 
-  // JEPQ 경제적 자유 달성 여부
   let jepqFinancialIndependence = false;
 
   for (let year = 0; year < targetYear; year++) {
-    // 매년 1월에 투자금 증가
     if (year > 0) {
       personMonthly = personMonthly * (1 + personGrowthRate);
       spouseMonthly = spouseMonthly * (1 + spouseGrowthRate);
     }
     personMonthly = applyContributionAdjustment(year, personMonthly, person.adjustments);
     spouseMonthly = applyContributionAdjustment(year, spouseMonthly, marriage.spouse.adjustments);
-    
+
     for (let month = 0; month < 12; month++) {
       const currentYear = year + month / 12;
+      const spouseActive = marriage.enabled && currentYear >= marriage.yearOfMarriage;
 
-      // 결혼 시점에 배우자 초기 자산 합산
-      if (
-        marriage.enabled &&
-        currentYear >= marriage.yearOfMarriage &&
-        !spouseInitialAdded
-      ) {
+      if (spouseActive && !spouseInitialMerged) {
         const initialAdd = marriage.spouse.initial || 0;
-        wealth += initialAdd;
-        principalBase += initialAdd;
-        spouseInitialAdded = true;
+        spouseWealth += initialAdd;
+        principalSpouse += initialAdd;
+        spouseInitialMerged = true;
       }
 
-      // JEPQ 경제적 자유 달성 체크
+      if (
+        marriage.enabled &&
+        marriage.buyHouse &&
+        spouseActive &&
+        !downPaymentDeducted
+      ) {
+        // 결혼 시점에 자기자본(다운페이)을 현금에서 차감
+        const totalBefore = youWealth + spouseWealth;
+        const youRatio = totalBefore > 0 ? youWealth / totalBefore : 0.5;
+        const spouseRatio = 1 - youRatio;
+        const payYou = marriage.downPayment * youRatio;
+        const paySpouse = marriage.downPayment * spouseRatio;
+        youWealth = Math.max(0, youWealth - payYou);
+        spouseWealth = Math.max(0, spouseWealth - paySpouse);
+        principalYou = Math.max(0, principalYou - payYou);
+        principalSpouse = Math.max(0, principalSpouse - paySpouse);
+        downPaymentDeducted = true;
+      }
+
       if (!jepqFinancialIndependence && retirement.enabled && retirement.useJEPQ && marriage.enabled) {
-        const jepqPortion = wealth * (retirement.jepqRatio / 100);
+        const totalWealth = youWealth + spouseWealth;
+        const jepqPortion = totalWealth * (retirement.jepqRatio / 100);
         const annualDividend = jepqPortion * (retirement.jepqDividendRate / 100);
         const monthlyDividend = annualDividend / 12;
-        
         const yearsFromNow = currentYear >= person.retireYear ? currentYear - person.retireYear : 0;
-        const adjustedExpense = retirement.monthlyExpense *
-          Math.pow(1 + retirement.inflationRate / 100, Math.max(0, yearsFromNow));
-        
+        const adjustedExpense = retirement.monthlyExpense * Math.pow(1 + retirement.inflationRate / 100, Math.max(0, yearsFromNow));
         if (monthlyDividend >= adjustedExpense) {
           jepqFinancialIndependence = true;
         }
       }
 
-      // 주택 가치 상승 (결혼 이후)
       if (marriage.enabled && currentYear >= marriage.yearOfMarriage && marriage.buyHouse) {
         houseValue = houseValue * (1 + houseAppreciationMonthlyRate);
       }
 
-      // 본인 은퇴 여부 확인
       const personRetired = retirement.enabled && currentYear >= person.retireYear;
+      const spouseRetired = marriage.enabled && retirement.enabled && currentYear >= marriage.yearOfMarriage && (currentYear >= marriage.spouse.retireYear || jepqFinancialIndependence);
 
-      // 배우자 은퇴 여부 확인 (결혼 후에만)
-      // JEPQ로 경제적 자유를 달성했다면 배우자도 은퇴 가능
-      const spouseRetired = marriage.enabled &&
-        retirement.enabled &&
-        currentYear >= marriage.yearOfMarriage &&
-        (currentYear >= marriage.spouse.retireYear || jepqFinancialIndependence);
-
-      // 은퇴 전 (적어도 한 명이 일하고 있음)
       if (!personRetired || (marriage.enabled && currentYear >= marriage.yearOfMarriage && !spouseRetired)) {
-        // 복리 적용 (위기 시나리오 반영)
         const crisisMonthlyRate = crisisActive(currentYear) ? crisis.drawdownRate / 100 / 12 : 0;
         if (useCompound) {
-          wealth = wealth * (1 + monthlyRate + crisisMonthlyRate);
+          youWealth = youWealth * (1 + youRateMonthly + crisisMonthlyRate);
+          if (spouseActive) {
+            spouseWealth = spouseWealth * (1 + spouseRateMonthly + crisisMonthlyRate);
+          }
         } else {
-          const interest = principalBase * (monthlyRate + crisisMonthlyRate);
-          wealth += interest;
+          const youInterest = principalYou * (youRateMonthly + crisisMonthlyRate);
+          youWealth += youInterest;
+          principalYou += youInterest;
+          if (spouseActive) {
+            const spouseInterest = principalSpouse * (spouseRateMonthly + crisisMonthlyRate);
+            spouseWealth += spouseInterest;
+            principalSpouse += spouseInterest;
+          }
         }
 
-        // 월 투자액 계산
         let monthlyInvestment = 0;
+        let youContr = 0;
+        let spouseContr = 0;
 
-        // 본인 투자 (은퇴 전일 때만)
         if (!personRetired) {
           monthlyInvestment += personMonthly;
+          youContr += personMonthly;
         }
-
-        // 결혼 이후라면
-        if (marriage.enabled && currentYear >= marriage.yearOfMarriage) {
-          // 배우자 저축 추가 (배우자가 은퇴 전일 때만)
+        if (spouseActive) {
           if (!spouseRetired) {
             monthlyInvestment += spouseMonthly;
+            spouseContr += spouseMonthly;
           }
-
-          // 주택 구매했다면 대출 상환 / 중도상환
           if (marriage.buyHouse && !loanPaidOff) {
             const monthsSinceLoanStart = Math.floor((currentYear - marriage.yearOfMarriage) * 12);
-            // 중도상환
             if (marriage.prepayEnabled && monthsSinceLoanStart >= prepayMonths) {
               const payoffInfo = getLoanPaymentAtMonth(
                 marriage.loanAmount,
@@ -272,7 +312,14 @@ export const calculateWealthWithMarriage = (
                 monthsSinceLoanStart
               );
               if (payoffInfo.remainingPrincipal > 0) {
-                wealth = Math.max(0, wealth - payoffInfo.remainingPrincipal);
+                const totalBefore = youWealth + spouseWealth;
+                const youRatio = totalBefore > 0 ? youWealth / totalBefore : 0.5;
+                const spouseRatio = 1 - youRatio;
+                const pay = payoffInfo.remainingPrincipal;
+                youWealth = Math.max(0, youWealth - pay * youRatio);
+                spouseWealth = Math.max(0, spouseWealth - pay * spouseRatio);
+                principalYou = Math.max(0, principalYou - pay * youRatio);
+                principalSpouse = Math.max(0, principalSpouse - pay * spouseRatio);
               }
               loanPaidOff = true;
             } else {
@@ -283,7 +330,6 @@ export const calculateWealthWithMarriage = (
                 marriage.repaymentType,
                 monthsSinceLoanStart
               );
-
               if (loanInfo.isComplete) {
                 loanPaidOff = true;
               } else {
@@ -293,76 +339,88 @@ export const calculateWealthWithMarriage = (
           }
         }
 
-        // 음수 방지
         monthlyInvestment = Math.max(0, monthlyInvestment);
-        wealth += monthlyInvestment;
-        if (!useCompound) {
-          principalBase += monthlyInvestment;
+        if (monthlyInvestment > 0) {
+          const totalContr = youContr + spouseContr;
+          const youShare = totalContr > 0 ? youContr / totalContr : 1;
+          const spouseShare = totalContr > 0 ? spouseContr / totalContr : 0;
+          youWealth += monthlyInvestment * youShare;
+          spouseWealth += monthlyInvestment * spouseShare;
+          if (!useCompound) {
+            principalYou += monthlyInvestment * youShare;
+            principalSpouse += monthlyInvestment * spouseShare;
+          }
         }
-      }
-      // 둘 다 은퇴 후
-      else if (personRetired && (!marriage.enabled || spouseRetired || currentYear < marriage.yearOfMarriage)) {
-        // 은퇴 기준 시점 (둘 중 늦은 은퇴 시점)
+      } else if (personRetired && (!marriage.enabled || spouseRetired || currentYear < marriage.yearOfMarriage)) {
         const effectiveRetireYear = marriage.enabled
           ? Math.max(person.retireYear, marriage.spouse.retireYear)
           : person.retireYear;
-
         const yearsAfterRetirement = currentYear - effectiveRetireYear;
         const adjustedExpense = retirement.monthlyExpense *
           Math.pow(1 + retirement.inflationRate / 100, Math.max(0, yearsAfterRetirement));
-
         const crisisMonthlyRate = crisisActive(currentYear) ? crisis.drawdownRate / 100 / 12 : 0;
 
         if (retirement.useJEPQ) {
           if (useCompound) {
-            // JEPQ/VOO 혼합 전략: 각각 성장
-            const jepqPortion = wealth * (retirement.jepqRatio / 100);
-            const vooPortion = wealth * (1 - retirement.jepqRatio / 100);
-
+            const total = youWealth + spouseWealth;
+            const jepqPortion = total * (retirement.jepqRatio / 100);
+            const vooPortion = total * (1 - retirement.jepqRatio / 100);
             const jepqGrowthRate = 0.02 / 12 + crisisMonthlyRate;
             const jepqAfterGrowth = jepqPortion * (1 + jepqGrowthRate);
-
             const vooGrowthRate = retirement.vooGrowthRate / 100 / 12 + crisisMonthlyRate;
             const vooAfterGrowth = vooPortion * (1 + vooGrowthRate);
-
-            wealth = jepqAfterGrowth + vooAfterGrowth;
+            const afterGrowth = jepqAfterGrowth + vooAfterGrowth;
+            const beforeTotal = youWealth + spouseWealth;
+            const youRatio = beforeTotal > 0 ? youWealth / beforeTotal : 0.5;
+            youWealth = afterGrowth * youRatio;
+            spouseWealth = afterGrowth * (1 - youRatio);
           } else {
             const effectiveRate =
               (retirement.jepqRatio / 100) * (0.02 / 12 + crisisMonthlyRate) +
               (1 - retirement.jepqRatio / 100) * (retirement.vooGrowthRate / 100 / 12 + crisisMonthlyRate);
-            const interest = principalBase * effectiveRate;
-            wealth += interest;
-            principalBase = Math.max(0, principalBase - adjustedExpense + interest); // expense 처리 후 아래서 다시 차감
+            const totalPrincipal = principalYou + principalSpouse;
+            const interest = totalPrincipal * effectiveRate;
+            const totalBefore = youWealth + spouseWealth + interest;
+            const youRatio = totalBefore > 0 ? youWealth / totalBefore : 0.5;
+            youWealth += interest * youRatio;
+            spouseWealth += interest * (1 - youRatio);
+            principalYou = Math.max(0, principalYou - adjustedExpense * youRatio + interest * youRatio);
+            principalSpouse = Math.max(0, principalSpouse - adjustedExpense * (1 - youRatio) + interest * (1 - youRatio));
           }
         } else {
-          // VOO만: 성장
           const baseVooGrowth = retirement.vooGrowthRate / 100 / 12;
           if (useCompound) {
-            wealth = wealth * (1 + baseVooGrowth + crisisMonthlyRate);
+            youWealth = youWealth * (1 + baseVooGrowth + crisisMonthlyRate);
+            spouseWealth = spouseWealth * (1 + baseVooGrowth + crisisMonthlyRate);
           } else {
-            const interest = principalBase * (baseVooGrowth + crisisMonthlyRate);
-            wealth += interest;
-            principalBase = Math.max(0, principalBase - adjustedExpense + interest); // expense 처리 후 아래서 다시 차감
+            const youInterest = principalYou * (baseVooGrowth + crisisMonthlyRate);
+            const spouseInterest = principalSpouse * (baseVooGrowth + crisisMonthlyRate);
+            youWealth += youInterest;
+            spouseWealth += spouseInterest;
+            const total = youWealth + spouseWealth;
+            const youRatio = total > 0 ? youWealth / total : 0.5;
+            principalYou = Math.max(0, principalYou - adjustedExpense * youRatio + youInterest);
+            principalSpouse = Math.max(0, principalSpouse - adjustedExpense * (1 - youRatio) + spouseInterest);
           }
         }
 
-        // 생활비만 인출
-        wealth -= adjustedExpense;
-        wealth = Math.max(0, wealth);
+        const totalAfterGrowth = youWealth + spouseWealth;
+        const youRatio = totalAfterGrowth > 0 ? youWealth / totalAfterGrowth : 0.5;
+        const youExpense = adjustedExpense * youRatio;
+        const spouseExpense = adjustedExpense * (1 - youRatio);
+        youWealth = Math.max(0, youWealth - youExpense);
+        spouseWealth = Math.max(0, spouseWealth - spouseExpense);
         if (!useCompound) {
-          principalBase = Math.max(0, principalBase - adjustedExpense);
+          principalYou = Math.max(0, principalYou - youExpense);
+          principalSpouse = Math.max(0, principalSpouse - spouseExpense);
         }
       }
     }
   }
 
-  // 최종 자산 = 금융자산 + 주택가치 - 남은 대출금
-  let finalWealth = wealth;
-  
+  let finalWealth = youWealth + spouseWealth;
   if (marriage.enabled && marriage.buyHouse && targetYear >= marriage.yearOfMarriage) {
-    finalWealth += houseValue; // 주택 가치 추가
-    
-    // 남은 대출금 차감 (중도상환/만기 여부 고려)
+    finalWealth += houseValue;
     if (!loanPaidOff) {
       const yearsSinceLoan = targetYear - marriage.yearOfMarriage;
       if (yearsSinceLoan < marriage.loanYears) {
@@ -378,7 +436,6 @@ export const calculateWealthWithMarriage = (
       }
     }
   }
-
   return finalWealth;
 };
 

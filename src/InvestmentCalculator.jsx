@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   PersonCard,
   StatCard,
@@ -26,6 +26,29 @@ import {
 } from './utils/calculations';
 import InputGroup from './components/InputGroup';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+
+const LOCAL_PRESET_KEY = 'vooAppCustomPresetsV1';
+
+const loadLocalPresets = () => {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(LOCAL_PRESET_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const persistLocalPresets = (presets) => {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(LOCAL_PRESET_KEY, JSON.stringify(presets));
+  } catch {
+    // ignore
+  }
+};
 
 const InvestmentCalculator = () => {
   // 본인 정보 (은퇴 시점 포함)
@@ -59,6 +82,78 @@ const InvestmentCalculator = () => {
   });
   // 자산 차트 실질가치 모드
   const [useRealAsset, setUseRealAsset] = useState(false);
+  // 자산 차트에 주택 포함 여부
+  const [useHouseInChart, setUseHouseInChart] = useState(true);
+  // 로컬 프리셋
+  const [savedPresets, setSavedPresets] = useState([]);
+  const [presetName, setPresetName] = useState('');
+  const [previewPreset, setPreviewPreset] = useState(null);
+
+  useEffect(() => {
+    setSavedPresets(loadLocalPresets());
+  }, []);
+
+  const handleSavePreset = () => {
+    const name = (presetName || '').trim() || `내 프리셋 ${savedPresets.length + 1}`;
+    const payload = {
+      id: Date.now(),
+      name,
+      savedAt: new Date().toISOString(),
+      data: {
+        you,
+        other,
+        years,
+        marriagePlan,
+        retirementPlan,
+        crisis,
+        otherUseCompound,
+        useLogScale,
+        useRealAsset,
+        useHouseInChart,
+      },
+    };
+    const next = [payload, ...savedPresets];
+    setSavedPresets(next);
+    persistLocalPresets(next);
+    setPresetName('');
+    setPreviewPreset(payload);
+  };
+
+  const handleDeletePreset = (id) => {
+    const next = savedPresets.filter((p) => p.id !== id);
+    setSavedPresets(next);
+    persistLocalPresets(next);
+    if (previewPreset?.id === id) setPreviewPreset(null);
+  };
+
+  const handleConfirmLoadPreset = (preset) => {
+    if (!preset?.data) return;
+    const cloned = JSON.parse(JSON.stringify(preset.data));
+    setYou(cloned.you);
+    setOther(cloned.other);
+    setYears(cloned.years);
+    setMarriagePlan(cloned.marriagePlan);
+    setRetirementPlan(cloned.retirementPlan);
+    setCrisis(cloned.crisis);
+    setOtherUseCompound(cloned.otherUseCompound ?? true);
+    setUseLogScale(cloned.useLogScale ?? true);
+    setUseRealAsset(cloned.useRealAsset ?? false);
+    setUseHouseInChart(cloned.useHouseInChart ?? true);
+    setPreviewPreset(null);
+  };
+
+  const formatSavedAt = (iso) => {
+    try {
+      return new Date(iso).toLocaleString('ko-KR', {
+        month: 'numeric',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return '';
+    }
+  };
 
   // 프리셋 적용
   const applyPreset = (presetName) => {
@@ -102,8 +197,23 @@ const InvestmentCalculator = () => {
               null,
               crisis,
               otherUseCompound
-            ) / 10000
+        ) / 10000
           : null;
+      const remainingLoan =
+        marriagePlan.enabled && marriagePlan.buyHouse && year >= marriagePlan.yearOfMarriage
+          ? (() => {
+              const monthsSinceLoan = Math.max(0, Math.floor((year - marriagePlan.yearOfMarriage) * 12));
+              if (monthsSinceLoan >= marriagePlan.loanYears * 12) return 0;
+              const info = getLoanPaymentAtMonth(
+                marriagePlan.loanAmount,
+                marriagePlan.loanRate,
+                marriagePlan.loanYears,
+                marriagePlan.repaymentType,
+                monthsSinceLoan
+              );
+              return Math.max(0, info.remainingPrincipal) / 10000;
+            })()
+          : 0;
       data.push({
         year,
         you:
@@ -131,6 +241,7 @@ const InvestmentCalculator = () => {
           otherUseCompound
         ) / 10000,
         house: houseValue,
+        remainingLoan,
         spouseWealth: spouseOnlyWealth,
       });
     }
@@ -281,6 +392,7 @@ const InvestmentCalculator = () => {
 • 월 생활비: ${marriagePlan.spouse.expense?.toLocaleString?.() || marriagePlan.spouse.expense}만원
 • 월 투자액: ${marriagePlan.spouse.monthly.toLocaleString()}만원
 • 투자액 증가율: ${marriagePlan.spouse.monthlyGrowthRate}%/년
+• 연 수익률: ${marriagePlan.spouse.rate}% 
 • 저축률: ${((marriagePlan.spouse.monthly / marriagePlan.spouse.salary) * 100).toFixed(1)}%
 • 은퇴 시점: ${marriagePlan.spouse.retireYear}년 후
 ${marriagePlan.spouse.adjustments?.length ? `• 투자액 변경: ${marriagePlan.spouse.adjustments.map((a) => `${a.year}년→${a.monthly}만원`).join(', ')}` : ''}
@@ -290,7 +402,7 @@ ${
 🏠 주택 구매 정보
 • 집 가격: ${marriagePlan.housePrice.toLocaleString()}만원 (${(marriagePlan.housePrice / 10000).toFixed(1)}억원)
 • 자기자본: ${marriagePlan.downPayment.toLocaleString()}만원
-• 대출금액: ${marriagePlan.loanAmount.toLocaleString()}만원 (${(marriagePlan.loanAmount / 10000).toFixed(1)}억원)
+• 대출금액: ${marriagePlan.loanAmount.toLocaleString()}만원 (${(marriagePlan.loanAmount / 10000).toFixed(1)}억원, LTV ${marriagePlan.housePrice > 0 ? ((marriagePlan.loanAmount / marriagePlan.housePrice) * 100).toFixed(1) : '0'}%)
 • 대출 금리: ${marriagePlan.loanRate}%
 • 대출 기간: ${marriagePlan.loanYears}년${marriagePlan.prepayEnabled ? ` (중도상환: 결혼 ${marriagePlan.prepayYear}년 후 일시상환)` : ''}
 • 상환방식: ${marriagePlan.repaymentType === 'equalPayment' ? '원리금균등' : marriagePlan.repaymentType === 'equalPrincipal' ? '원금균등' : '체증식'}
@@ -469,6 +581,150 @@ ${marriagePlan.spouse.adjustments?.length ? `• 배우자 투자액 변경: ${m
             />
             <PersonCard person={other} setPerson={setOther} color="border-red-500" />
           </div>
+        </div>
+
+        {/* 내 프리셋 저장/불러오기 */}
+        <div className="bg-white p-6 rounded-lg shadow mb-8 border border-gray-100">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-3">
+            <div>
+              <h3 className="text-lg font-bold text-gray-800">💾 내 프리셋 저장/불러오기</h3>
+              <p className="text-sm text-gray-500">현재 입력값을 저장하고, 나중에 불러올 수 있습니다.</p>
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={presetName}
+                onChange={(e) => setPresetName(e.target.value)}
+                placeholder="프리셋 이름 (예: 2035 결혼 플랜)"
+                className="px-3 py-2 border border-gray-300 rounded-lg w-56 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+              />
+              <button
+                type="button"
+                onClick={handleSavePreset}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition"
+              >
+                저장
+              </button>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {savedPresets.length === 0 && (
+              <div className="text-sm text-gray-500">저장된 프리셋이 없습니다. 이름을 입력하고 저장해 보세요.</div>
+            )}
+            {savedPresets.map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                onClick={() => setPreviewPreset(preset)}
+                className={`px-3 py-2 rounded-lg border text-sm transition ${
+                  previewPreset?.id === preset.id
+                    ? 'border-blue-500 bg-blue-50 text-blue-700'
+                    : 'border-gray-200 bg-gray-50 text-gray-700 hover:border-blue-200'
+                }`}
+                title={`저장일: ${formatSavedAt(preset.savedAt)}`}
+              >
+                {preset.name}
+              </button>
+            ))}
+          </div>
+
+          {previewPreset && (
+            <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div>
+                  <div className="font-semibold text-gray-800">{previewPreset.name}</div>
+                  <div className="text-xs text-gray-500">저장: {formatSavedAt(previewPreset.savedAt)}</div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleConfirmLoadPreset(previewPreset)}
+                    className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700"
+                  >
+                    불러오기
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewPreset(null)}
+                    className="px-3 py-1.5 rounded-lg border border-gray-300 text-sm text-gray-700"
+                  >
+                    취소
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeletePreset(previewPreset.id)}
+                    className="px-3 py-1.5 rounded-lg border border-red-200 text-sm text-red-600 hover:bg-red-50"
+                  >
+                    삭제
+                  </button>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs text-gray-700 mt-3">
+                <div>
+                  <div className="font-semibold text-gray-900">투자 기간</div>
+                  <div>{previewPreset.data.years}년</div>
+                </div>
+                <div>
+                  <div className="font-semibold text-gray-900">{previewPreset.data.you.name}</div>
+                  <div>세후 {previewPreset.data.you.salary.toLocaleString()}만원 · 생활비 {previewPreset.data.you.expense.toLocaleString()}만원</div>
+                  <div>연 {previewPreset.data.you.rate}% · 월 저축 {previewPreset.data.you.monthly}만원</div>
+                  <div>초기 자산 {previewPreset.data.you.initial.toLocaleString()}만원</div>
+                </div>
+                <div>
+                  <div className="font-semibold text-gray-900">{previewPreset.data.other.name}</div>
+                  <div>세후 {previewPreset.data.other.salary.toLocaleString()}만원 · 생활비 {previewPreset.data.other.expense.toLocaleString()}만원</div>
+                  <div>연 {previewPreset.data.other.rate}% · 월 저축 {previewPreset.data.other.monthly}만원</div>
+                  <div>초기 자산 {previewPreset.data.other.initial.toLocaleString()}만원</div>
+                </div>
+                <div>
+                  <div className="font-semibold text-gray-900">결혼/주택</div>
+                  <div>
+                    {previewPreset.data.marriagePlan.enabled ? '결혼 O' : '결혼 X'} /{' '}
+                    {previewPreset.data.marriagePlan.buyHouse ? '집 구매 O' : '집 구매 X'}
+                  </div>
+                  {previewPreset.data.marriagePlan.buyHouse && (
+                    <div className="text-gray-600">
+                      집 {previewPreset.data.marriagePlan.housePrice.toLocaleString()}만원 · 대출{' '}
+                      {previewPreset.data.marriagePlan.loanAmount.toLocaleString()}만원 · 금리 {previewPreset.data.marriagePlan.loanRate}%
+                    </div>
+                  )}
+                  <div className="text-gray-600">
+                    상환방식 {previewPreset.data.marriagePlan.repaymentType === 'equalPayment' ? '원리금균등' : previewPreset.data.marriagePlan.repaymentType === 'equalPrincipal' ? '원금균등' : '체증식'}
+                    {previewPreset.data.marriagePlan.prepayEnabled ? ` · ${previewPreset.data.marriagePlan.prepayYear}년 후 중도상환` : ''}
+                  </div>
+                </div>
+                <div>
+                  <div className="font-semibold text-gray-900">은퇴</div>
+                  <div>{previewPreset.data.retirementPlan.enabled ? '은퇴 계산 O' : '은퇴 계산 X'}</div>
+                  <div className="text-gray-600">생활비 {previewPreset.data.retirementPlan.monthlyExpense}만원</div>
+                </div>
+                <div>
+                  <div className="font-semibold text-gray-900">위기 시나리오</div>
+                  <div>
+                    {previewPreset.data.crisis.enabled
+                      ? `${previewPreset.data.crisis.startYear}년차 ~ ${previewPreset.data.crisis.duration}년, ${previewPreset.data.crisis.drawdownRate}%`
+                      : '적용 안 함'}
+                  </div>
+                </div>
+                {previewPreset.data.marriagePlan.enabled && (
+                  <div>
+                    <div className="font-semibold text-gray-900">배우자</div>
+                    <div>세후 {previewPreset.data.marriagePlan.spouse.salary.toLocaleString()}만원 · 생활비 {previewPreset.data.marriagePlan.spouse.expense.toLocaleString()}만원</div>
+                    <div>연 {previewPreset.data.marriagePlan.spouse.rate}% · 월 저축 {previewPreset.data.marriagePlan.spouse.monthly}만원</div>
+                    <div>초기 자산 {previewPreset.data.marriagePlan.spouse.initial?.toLocaleString?.() || previewPreset.data.marriagePlan.spouse.initial}만원</div>
+                  </div>
+                )}
+                <div>
+                  <div className="font-semibold text-gray-900">차트 옵션</div>
+                  <div className="text-gray-600">
+                    로그 {previewPreset.data.useLogScale ? 'ON' : 'OFF'} / 실질 {previewPreset.data.useRealAsset ? 'ON' : 'OFF'} / 집포함 {previewPreset.data.useHouseInChart ? 'ON' : 'OFF'}
+                  </div>
+                  <div className="text-gray-600">단리/복리(비교대상): {previewPreset.data.otherUseCompound ? '복리' : '단리'}</div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* 대출 계산기 */}
@@ -761,6 +1017,8 @@ ${marriagePlan.spouse.adjustments?.length ? `• 배우자 투자액 변경: ${m
           useCompound={otherUseCompound}
           useRealAsset={useRealAsset}
           onToggleRealAsset={setUseRealAsset}
+          useHouseInChart={useHouseInChart}
+          onToggleHouseInChart={setUseHouseInChart}
           inflationRate={retirementPlan.inflationRate}
         />
 

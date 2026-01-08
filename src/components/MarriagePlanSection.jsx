@@ -10,18 +10,21 @@ const MarriagePlanSection = ({ marriagePlan, setMarriagePlan, personMonthly }) =
     setMarriagePlan({ ...marriagePlan, spouse: next });
   };
 
-  const updateLoanAmount = (housePrice, downPayment) => {
-    return Math.max(0, housePrice - downPayment);
+  const clampLoanByLTV = (housePrice, loanAmount) => {
+    const maxLoan = housePrice * 0.8; // LTV 80%
+    return Math.min(Math.max(0, loanAmount), maxLoan);
   };
 
   const handleHousePriceChange = (v) => {
-    const newLoanAmount = updateLoanAmount(v, marriagePlan.downPayment);
-    setMarriagePlan({ ...marriagePlan, housePrice: v, loanAmount: newLoanAmount });
+    const clampedLoan = clampLoanByLTV(v, marriagePlan.loanAmount);
+    const downPayment = Math.max(0, v - clampedLoan);
+    setMarriagePlan({ ...marriagePlan, housePrice: v, loanAmount: clampedLoan, downPayment });
   };
 
-  const handleDownPaymentChange = (v) => {
-    const newLoanAmount = updateLoanAmount(marriagePlan.housePrice, v);
-    setMarriagePlan({ ...marriagePlan, downPayment: v, loanAmount: newLoanAmount });
+  const handleLoanAmountChange = (v) => {
+    const clampedLoan = clampLoanByLTV(marriagePlan.housePrice, v);
+    const downPayment = Math.max(0, marriagePlan.housePrice - clampedLoan);
+    setMarriagePlan({ ...marriagePlan, loanAmount: clampedLoan, downPayment });
   };
 
   // 초기 월 상환액 계산
@@ -295,22 +298,28 @@ const MarriagePlanSection = ({ marriagePlan, setMarriagePlan, personMonthly }) =
                 />
 
                 <InputGroup
-                  label="자기자본 (보증금/현금)"
-                  value={marriagePlan.downPayment}
-                  onChange={handleDownPaymentChange}
+                  label="대출금액 (최대 LTV 80%)"
+                  value={marriagePlan.loanAmount}
+                  onChange={handleLoanAmountChange}
                   min={0}
-                  max={marriagePlan.housePrice}
-                  step={1000}
+                  max={marriagePlan.housePrice * 0.8}
+                  step={100}
                   unit="만원"
                 />
 
                 <div className="p-3 bg-blue-50 rounded">
-                  <div className="text-sm text-gray-600">대출금액</div>
+                  <div className="flex justify-between text-sm text-gray-600">
+                    <span>대출금액</span>
+                    <span>LTV {(marriagePlan.housePrice > 0 ? (marriagePlan.loanAmount / marriagePlan.housePrice) * 100 : 0).toFixed(1)}%</span>
+                  </div>
                   <div className="text-xl font-bold text-blue-600">
                     {marriagePlan.loanAmount.toLocaleString()}만원
                     <span className="text-sm font-normal text-gray-500 ml-2">
                       ({(marriagePlan.loanAmount / 10000).toFixed(1)}억원)
                     </span>
+                  </div>
+                  <div className="text-xs text-gray-600 mt-1">
+                    자기자본: {marriagePlan.downPayment.toLocaleString()}만원 ({(marriagePlan.downPayment / 10000).toFixed(1)}억)
                   </div>
                 </div>
 

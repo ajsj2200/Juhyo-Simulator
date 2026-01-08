@@ -54,6 +54,8 @@ const WealthChart = ({
   useRealAsset = false,
   inflationRate = 0,
   onToggleRealAsset,
+  useHouseInChart = true,
+  onToggleHouseInChart,
 }) => {
   const effectiveRetireYear =
     marriagePlan.enabled && retirementPlan.enabled
@@ -84,7 +86,12 @@ const WealthChart = ({
       other: clamp(d.other),
       house: clamp(d.house),
       spouseWealth: clamp(d.spouseWealth),
+      remainingLoan: clamp(d.remainingLoan),
     };
+    // 집 제외 옵션: 집 가치 제거, 남은 대출은 다시 더해 금융자산만 표시
+    if (!useHouseInChart) {
+      base.you = clamp((base.you ?? 0) - (base.house ?? 0) + (base.remainingLoan ?? 0));
+    }
     if (!useRealAsset) return base;
     const factor = Math.pow(1 + (inflationRate || 0) / 100, d.year || 0);
     const adjust = (val) => (val === null || val === undefined ? val : val / (factor || 1));
@@ -95,6 +102,7 @@ const WealthChart = ({
       other: adjust(base.other),
       house: adjust(base.house),
       spouseWealth: adjust(base.spouseWealth),
+      remainingLoan: adjust(base.remainingLoan),
     };
   });
   const loanCompletionYear =
@@ -121,6 +129,19 @@ const WealthChart = ({
           <p className="text-sm text-gray-500">이벤트 구간(결혼/은퇴/대출완료)과 함께 비교해 보세요.</p>
         </div>
         <div className="flex items-center gap-2">
+          {marriagePlan.enabled && marriagePlan.buyHouse && onToggleHouseInChart && (
+            <button
+              type="button"
+              onClick={() => onToggleHouseInChart(!useHouseInChart)}
+              className={`text-xs px-3 py-1.5 rounded border transition-colors ${
+                useHouseInChart
+                  ? 'bg-amber-50 border-amber-200 text-amber-700'
+                  : 'bg-gray-50 border-gray-200 text-gray-700'
+              }`}
+            >
+              {useHouseInChart ? '집 포함' : '집 제외'}
+            </button>
+          )}
           {onToggleRealAsset && (
             <button
               type="button"

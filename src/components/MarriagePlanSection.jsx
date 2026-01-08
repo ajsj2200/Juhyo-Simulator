@@ -288,6 +288,19 @@ const MarriagePlanSection = ({ marriagePlan, setMarriagePlan, personMonthly }) =
             {marriagePlan.buyHouse && (
               <>
                 <InputGroup
+                  label="집 구매 시점"
+                  value={marriagePlan.yearOfHousePurchase ?? marriagePlan.yearOfMarriage}
+                  onChange={(v) => setMarriagePlan({ ...marriagePlan, yearOfHousePurchase: v })}
+                  min={0}
+                  max={40}
+                  step={1}
+                  unit="년 후"
+                />
+                <p className="text-xs text-gray-500 -mt-2 mb-2">
+                  * 0년 = 이미 집이 있거나 즉시 구매. 결혼과 별개로 설정 가능
+                </p>
+
+                <InputGroup
                   label="집 가격"
                   value={marriagePlan.housePrice}
                   onChange={handleHousePriceChange}
@@ -354,7 +367,7 @@ const MarriagePlanSection = ({ marriagePlan, setMarriagePlan, personMonthly }) =
                       }
                       className="w-4 h-4 text-amber-600 rounded focus:ring-amber-500"
                     />
-                    <span className="ml-2 text-sm text-amber-700">결혼 후 일시 상환</span>
+                    <span className="ml-2 text-sm text-amber-700">집 구매 후 일시 상환</span>
                   </label>
                 </div>
 
@@ -372,7 +385,7 @@ const MarriagePlanSection = ({ marriagePlan, setMarriagePlan, personMonthly }) =
                       min={0}
                       max={marriagePlan.loanYears}
                       step={1}
-                      unit="년 (결혼 후)"
+                      unit="년 (집 구매 후)"
                     />
                     <div className="p-3 bg-amber-50 rounded text-sm text-amber-800">
                       예상 잔액: {prepayRemaining.toLocaleString()}만원
@@ -431,9 +444,9 @@ const MarriagePlanSection = ({ marriagePlan, setMarriagePlan, personMonthly }) =
                   <div className="text-sm">
                     <span className="text-gray-600">대출 완료 시점: </span>
                     <span className="font-bold text-green-600">
-                      결혼 {effectiveLoanYears}년 후
+                      집 구매 {effectiveLoanYears}년 후
                       <span className="text-xs font-normal ml-1">
-                        (투자 시작 {marriagePlan.yearOfMarriage + effectiveLoanYears}년 후)
+                        (투자 시작 {(marriagePlan.yearOfHousePurchase ?? marriagePlan.yearOfMarriage) + effectiveLoanYears}년 후)
                       </span>
                     </span>
                   </div>

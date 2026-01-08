@@ -199,9 +199,11 @@ export const calculateWealthWithMarriage = (
   const prepayMonths = Math.floor((marriage.prepayYear || marriage.loanYears) * 12);
   let loanPaidOff = false;
   let spouseInitialMerged = false;
-  let houseValue = marriage.buyHouse && marriage.enabled ? marriage.housePrice : 0;
-  const houseAppreciationMonthlyRate = marriage.buyHouse && marriage.enabled 
-    ? marriage.houseAppreciationRate / 100 / 12 
+  // 집 구매 시점 (기본값: 결혼 시점)
+  const yearOfHousePurchase = marriage.yearOfHousePurchase ?? marriage.yearOfMarriage;
+  let houseValue = marriage.buyHouse ? marriage.housePrice : 0;
+  const houseAppreciationMonthlyRate = marriage.buyHouse
+    ? marriage.houseAppreciationRate / 100 / 12
     : 0;
   let downPaymentDeducted = !marriage.buyHouse;
 
@@ -232,16 +234,12 @@ export const calculateWealthWithMarriage = (
         spouseInitialMerged = true;
       }
 
-      if (
-        marriage.enabled &&
-        marriage.buyHouse &&
-        spouseActive &&
-        !downPaymentDeducted
-      ) {
-        // 결혼 시점에 자기자본(다운페이)을 현금에서 차감
+      // 집 구매 시점에 자기자본(다운페이)을 현금에서 차감
+      const housePurchaseActive = marriage.buyHouse && currentYear >= yearOfHousePurchase;
+      if (housePurchaseActive && !downPaymentDeducted) {
         const totalBefore = youWealth + spouseWealth;
-        const youRatio = totalBefore > 0 ? youWealth / totalBefore : 0.5;
-        const spouseRatio = 1 - youRatio;
+        const youRatio = totalBefore > 0 ? youWealth / totalBefore : (spouseActive ? 0.5 : 1);
+        const spouseRatio = spouseActive ? 1 - youRatio : 0;
         const payYou = marriage.downPayment * youRatio;
         const paySpouse = marriage.downPayment * spouseRatio;
         youWealth = Math.max(0, youWealth - payYou);
@@ -263,7 +261,8 @@ export const calculateWealthWithMarriage = (
         }
       }
 
-      if (marriage.enabled && currentYear >= marriage.yearOfMarriage && marriage.buyHouse) {
+      // 집 구매 후 집값 상승
+      if (housePurchaseActive) {
         houseValue = houseValue * (1 + houseAppreciationMonthlyRate);
       }
 
@@ -301,40 +300,41 @@ export const calculateWealthWithMarriage = (
             monthlyInvestment += spouseMonthly;
             spouseContr += spouseMonthly;
           }
-          if (marriage.buyHouse && !loanPaidOff) {
-            const monthsSinceLoanStart = Math.floor((currentYear - marriage.yearOfMarriage) * 12);
-            if (marriage.prepayEnabled && monthsSinceLoanStart >= prepayMonths) {
-              const payoffInfo = getLoanPaymentAtMonth(
-                marriage.loanAmount,
-                marriage.loanRate,
-                marriage.loanYears,
-                marriage.repaymentType,
-                monthsSinceLoanStart
-              );
-              if (payoffInfo.remainingPrincipal > 0) {
-                const totalBefore = youWealth + spouseWealth;
-                const youRatio = totalBefore > 0 ? youWealth / totalBefore : 0.5;
-                const spouseRatio = 1 - youRatio;
-                const pay = payoffInfo.remainingPrincipal;
-                youWealth = Math.max(0, youWealth - pay * youRatio);
-                spouseWealth = Math.max(0, spouseWealth - pay * spouseRatio);
-                principalYou = Math.max(0, principalYou - pay * youRatio);
-                principalSpouse = Math.max(0, principalSpouse - pay * spouseRatio);
-              }
+        }
+        // 집 구매 후 대출 상환 (결혼과 무관)
+        if (housePurchaseActive && !loanPaidOff) {
+          const monthsSinceLoanStart = Math.floor((currentYear - yearOfHousePurchase) * 12);
+          if (marriage.prepayEnabled && monthsSinceLoanStart >= prepayMonths) {
+            const payoffInfo = getLoanPaymentAtMonth(
+              marriage.loanAmount,
+              marriage.loanRate,
+              marriage.loanYears,
+              marriage.repaymentType,
+              monthsSinceLoanStart
+            );
+            if (payoffInfo.remainingPrincipal > 0) {
+              const totalBefore = youWealth + spouseWealth;
+              const youRatio = totalBefore > 0 ? youWealth / totalBefore : (spouseActive ? 0.5 : 1);
+              const spouseRatio = spouseActive ? 1 - youRatio : 0;
+              const pay = payoffInfo.remainingPrincipal;
+              youWealth = Math.max(0, youWealth - pay * youRatio);
+              spouseWealth = Math.max(0, spouseWealth - pay * spouseRatio);
+              principalYou = Math.max(0, principalYou - pay * youRatio);
+              principalSpouse = Math.max(0, principalSpouse - pay * spouseRatio);
+            }
+            loanPaidOff = true;
+          } else {
+            const loanInfo = getLoanPaymentAtMonth(
+              marriage.loanAmount,
+              marriage.loanRate,
+              marriage.loanYears,
+              marriage.repaymentType,
+              monthsSinceLoanStart
+            );
+            if (loanInfo.isComplete) {
               loanPaidOff = true;
             } else {
-              const loanInfo = getLoanPaymentAtMonth(
-                marriage.loanAmount,
-                marriage.loanRate,
-                marriage.loanYears,
-                marriage.repaymentType,
-                monthsSinceLoanStart
-              );
-              if (loanInfo.isComplete) {
-                loanPaidOff = true;
-              } else {
-                monthlyInvestment -= loanInfo.payment;
-              }
+              monthlyInvestment -= loanInfo.payment;
             }
           }
         }
@@ -419,10 +419,10 @@ export const calculateWealthWithMarriage = (
   }
 
   let finalWealth = youWealth + spouseWealth;
-  if (marriage.enabled && marriage.buyHouse && targetYear >= marriage.yearOfMarriage) {
+  if (marriage.buyHouse && targetYear >= yearOfHousePurchase) {
     finalWealth += houseValue;
     if (!loanPaidOff) {
-      const yearsSinceLoan = targetYear - marriage.yearOfMarriage;
+      const yearsSinceLoan = targetYear - yearOfHousePurchase;
       if (yearsSinceLoan < marriage.loanYears) {
         const monthsSinceLoan = yearsSinceLoan * 12;
         const loanInfo = getLoanPaymentAtMonth(
@@ -548,12 +548,13 @@ const applyContributionAdjustment = (currentYear, currentMonthly, adjustments = 
 };
 
 /**
- * 특정 시점의 주택 가치 계산 (결혼 이후, 월 복리 상승)
+ * 특정 시점의 주택 가치 계산 (집 구매 이후, 월 복리 상승)
  */
 export const calculateHouseValue = (marriage, targetYear) => {
-  if (!marriage.enabled || !marriage.buyHouse || targetYear < marriage.yearOfMarriage) return 0;
+  const yearOfHousePurchase = marriage.yearOfHousePurchase ?? marriage.yearOfMarriage;
+  if (!marriage.buyHouse || targetYear < yearOfHousePurchase) return 0;
 
-  const months = Math.floor((targetYear - marriage.yearOfMarriage) * 12);
+  const months = Math.floor((targetYear - yearOfHousePurchase) * 12);
   let value = marriage.housePrice;
   const monthlyRate = marriage.houseAppreciationRate / 100 / 12;
 
@@ -562,4 +563,288 @@ export const calculateHouseValue = (marriage, targetYear) => {
   }
 
   return value;
+};
+
+/**
+ * 과거 S&P 500 수익률을 사용한 자산 계산
+ * @param {number} initial - 초기 자산
+ * @param {number} monthly - 월 투자액
+ * @param {number[]} annualReturns - 연도별 수익률 배열 (예: [37.2, 23.84, -7.18, ...])
+ * @param {number} years - 투자 기간
+ * @param {number} monthlyGrowthRate - 월 투자액 연간 증가율
+ * @param {object} person - 개인 정보 (adjustments 포함)
+ * @param {object} retirement - 은퇴 계획
+ * @param {boolean} useCompound - 복리 여부
+ * @returns {object} { wealth, yearlyData }
+ */
+export const calculateWealthWithHistoricalReturns = (
+  initial,
+  monthly,
+  annualReturns,
+  years,
+  monthlyGrowthRate = 0,
+  person = null,
+  retirement = null,
+  useCompound = true
+) => {
+  let wealth = initial;
+  let principalBase = wealth;
+  let currentMonthly = monthly;
+  const growthRate = monthlyGrowthRate / 100;
+  const yearlyData = [{ year: 0, wealth: initial, returnRate: null }];
+
+  for (let year = 0; year < years; year++) {
+    // 해당 연도의 수익률 (배열 순환)
+    const yearReturn = annualReturns[year % annualReturns.length] || 0;
+    const monthlyRate = yearReturn / 100 / 12;
+
+    // 매년 1월(첫 달)에 투자금 증가
+    if (year > 0) {
+      currentMonthly = currentMonthly * (1 + growthRate);
+    }
+    currentMonthly = applyContributionAdjustment(year, currentMonthly, person?.adjustments);
+
+    for (let month = 0; month < 12; month++) {
+      const currentYear = year + month / 12;
+
+      // 은퇴 여부 확인
+      const isRetired = retirement && retirement.enabled && person && currentYear >= person.retireYear;
+
+      if (!isRetired) {
+        // 은퇴 전: 투자 지속
+        if (useCompound) {
+          wealth = wealth * (1 + monthlyRate) + currentMonthly;
+        } else {
+          const interest = principalBase * monthlyRate;
+          wealth += interest + currentMonthly;
+          principalBase += currentMonthly;
+        }
+      } else {
+        // 은퇴 후: 생활비 인출
+        const yearsAfterRetirement = currentYear - person.retireYear;
+        const adjustedExpense = retirement.monthlyExpense *
+          Math.pow(1 + retirement.inflationRate / 100, Math.max(0, yearsAfterRetirement));
+
+        if (useCompound) {
+          wealth = wealth * (1 + monthlyRate);
+        } else {
+          const interest = principalBase * monthlyRate;
+          wealth += interest;
+          principalBase = Math.max(0, principalBase - adjustedExpense + interest);
+        }
+
+        wealth -= adjustedExpense;
+      }
+    }
+
+    yearlyData.push({
+      year: year + 1,
+      wealth,
+      returnRate: yearReturn,
+    });
+  }
+
+  return { wealth, yearlyData };
+};
+
+/**
+ * 과거 S&P 500 수익률을 사용한 자산 계산 (결혼 포함)
+ */
+export const calculateWealthWithMarriageHistorical = (
+  person,
+  targetYear,
+  marriage,
+  retirement,
+  annualReturns,
+  useCompound = true
+) => {
+  let youWealth = person.initial;
+  let spouseWealth = 0;
+  let principalYou = youWealth;
+  let principalSpouse = 0;
+  let spouseInitialMerged = false;
+  const yearOfHousePurchase = marriage.yearOfHousePurchase ?? marriage.yearOfMarriage;
+  let houseValue = marriage.buyHouse ? marriage.housePrice : 0;
+  const houseAppreciationMonthlyRate = marriage.buyHouse
+    ? marriage.houseAppreciationRate / 100 / 12
+    : 0;
+  let downPaymentDeducted = !marriage.buyHouse;
+  const prepayMonths = Math.floor((marriage.prepayYear || marriage.loanYears) * 12);
+  let loanPaidOff = false;
+
+  let personMonthly = person.monthly;
+  let spouseMonthly = marriage.spouse.monthly;
+  const personGrowthRate = (person.monthlyGrowthRate || 0) / 100;
+  const spouseGrowthRate = (marriage.spouse.monthlyGrowthRate || 0) / 100;
+
+  const yearlyData = [{ year: 0, wealth: person.initial, returnRate: null }];
+
+  for (let year = 0; year < targetYear; year++) {
+    const yearReturn = annualReturns[year % annualReturns.length] || 0;
+    const youRateMonthly = yearReturn / 100 / 12;
+    const spouseRateMonthly = yearReturn / 100 / 12;
+
+    if (year > 0) {
+      personMonthly = personMonthly * (1 + personGrowthRate);
+      spouseMonthly = spouseMonthly * (1 + spouseGrowthRate);
+    }
+    personMonthly = applyContributionAdjustment(year, personMonthly, person.adjustments);
+    spouseMonthly = applyContributionAdjustment(year, spouseMonthly, marriage.spouse.adjustments);
+
+    for (let month = 0; month < 12; month++) {
+      const currentYear = year + month / 12;
+      const spouseActive = marriage.enabled && currentYear >= marriage.yearOfMarriage;
+      const housePurchaseActive = marriage.buyHouse && currentYear >= yearOfHousePurchase;
+
+      if (spouseActive && !spouseInitialMerged) {
+        const initialAdd = marriage.spouse.initial || 0;
+        spouseWealth += initialAdd;
+        principalSpouse += initialAdd;
+        spouseInitialMerged = true;
+      }
+
+      // 집 구매 시점에 다운페이 차감
+      if (housePurchaseActive && !downPaymentDeducted) {
+        const totalBefore = youWealth + spouseWealth;
+        const youRatio = totalBefore > 0 ? youWealth / totalBefore : (spouseActive ? 0.5 : 1);
+        const spouseRatio = spouseActive ? 1 - youRatio : 0;
+        const payYou = marriage.downPayment * youRatio;
+        const paySpouse = marriage.downPayment * spouseRatio;
+        youWealth = Math.max(0, youWealth - payYou);
+        spouseWealth = Math.max(0, spouseWealth - paySpouse);
+        principalYou = Math.max(0, principalYou - payYou);
+        principalSpouse = Math.max(0, principalSpouse - paySpouse);
+        downPaymentDeducted = true;
+      }
+
+      // 집 구매 후 집값 상승
+      if (housePurchaseActive) {
+        houseValue = houseValue * (1 + houseAppreciationMonthlyRate);
+      }
+
+      const personRetired = retirement?.enabled && currentYear >= person.retireYear;
+      const spouseRetired = marriage.enabled && retirement?.enabled && currentYear >= marriage.yearOfMarriage && currentYear >= marriage.spouse.retireYear;
+
+      if (!personRetired || (marriage.enabled && currentYear >= marriage.yearOfMarriage && !spouseRetired)) {
+        if (useCompound) {
+          youWealth = youWealth * (1 + youRateMonthly);
+          if (spouseActive) {
+            spouseWealth = spouseWealth * (1 + spouseRateMonthly);
+          }
+        } else {
+          const youInterest = principalYou * youRateMonthly;
+          youWealth += youInterest;
+          if (spouseActive) {
+            const spouseInterest = principalSpouse * spouseRateMonthly;
+            spouseWealth += spouseInterest;
+          }
+        }
+
+        let monthlyInvestment = 0;
+        let youContr = 0;
+        let spouseContr = 0;
+
+        if (!personRetired) {
+          monthlyInvestment += personMonthly;
+          youContr += personMonthly;
+        }
+        if (spouseActive) {
+          if (!spouseRetired) {
+            monthlyInvestment += spouseMonthly;
+            spouseContr += spouseMonthly;
+          }
+        }
+        // 집 구매 후 대출 상환
+        if (housePurchaseActive && !loanPaidOff) {
+          const monthsSinceLoanStart = Math.floor((currentYear - yearOfHousePurchase) * 12);
+          if (marriage.prepayEnabled && monthsSinceLoanStart >= prepayMonths) {
+            const payoffInfo = getLoanPaymentAtMonth(
+              marriage.loanAmount,
+              marriage.loanRate,
+              marriage.loanYears,
+              marriage.repaymentType,
+              monthsSinceLoanStart
+            );
+            if (payoffInfo.remainingPrincipal > 0) {
+              const totalBefore = youWealth + spouseWealth;
+              const youRatio = totalBefore > 0 ? youWealth / totalBefore : (spouseActive ? 0.5 : 1);
+              const pay = payoffInfo.remainingPrincipal;
+              youWealth = Math.max(0, youWealth - pay * youRatio);
+              spouseWealth = Math.max(0, spouseWealth - pay * (1 - youRatio));
+            }
+            loanPaidOff = true;
+          } else {
+            const loanInfo = getLoanPaymentAtMonth(
+              marriage.loanAmount,
+              marriage.loanRate,
+              marriage.loanYears,
+              marriage.repaymentType,
+              monthsSinceLoanStart
+            );
+            if (loanInfo.isComplete) {
+              loanPaidOff = true;
+            } else {
+              monthlyInvestment -= loanInfo.payment;
+            }
+          }
+        }
+
+        if (monthlyInvestment !== 0) {
+          const totalContr = youContr + spouseContr;
+          const youShare = totalContr > 0 ? youContr / totalContr : 1;
+          const spouseShare = totalContr > 0 ? spouseContr / totalContr : 0;
+          youWealth += monthlyInvestment * youShare;
+          spouseWealth += monthlyInvestment * spouseShare;
+          if (!useCompound) {
+            principalYou += monthlyInvestment * youShare;
+            principalSpouse += monthlyInvestment * spouseShare;
+          }
+        }
+      } else if (personRetired && (!marriage.enabled || spouseRetired || currentYear < marriage.yearOfMarriage)) {
+        const effectiveRetireYear = marriage.enabled
+          ? Math.max(person.retireYear, marriage.spouse.retireYear)
+          : person.retireYear;
+        const yearsAfterRetirement = currentYear - effectiveRetireYear;
+        const adjustedExpense = retirement.monthlyExpense *
+          Math.pow(1 + retirement.inflationRate / 100, Math.max(0, yearsAfterRetirement));
+
+        if (useCompound) {
+          youWealth = youWealth * (1 + youRateMonthly);
+          spouseWealth = spouseWealth * (1 + spouseRateMonthly);
+        }
+
+        const totalAfterGrowth = youWealth + spouseWealth;
+        const youRatio = totalAfterGrowth > 0 ? youWealth / totalAfterGrowth : 0.5;
+        youWealth = youWealth - adjustedExpense * youRatio;
+        spouseWealth = spouseWealth - adjustedExpense * (1 - youRatio);
+      }
+    }
+
+    yearlyData.push({
+      year: year + 1,
+      wealth: youWealth + spouseWealth + (marriage.buyHouse && year + 1 >= yearOfHousePurchase ? houseValue : 0),
+      returnRate: yearReturn,
+    });
+  }
+
+  let finalWealth = youWealth + spouseWealth;
+  if (marriage.buyHouse && targetYear >= yearOfHousePurchase) {
+    finalWealth += houseValue;
+    if (!loanPaidOff) {
+      const yearsSinceLoan = targetYear - yearOfHousePurchase;
+      if (yearsSinceLoan < marriage.loanYears) {
+        const monthsSinceLoan = yearsSinceLoan * 12;
+        const loanInfo = getLoanPaymentAtMonth(
+          marriage.loanAmount,
+          marriage.loanRate,
+          marriage.loanYears,
+          marriage.repaymentType,
+          monthsSinceLoan
+        );
+        finalWealth -= loanInfo.remainingPrincipal;
+      }
+    }
+  }
+
+  return { wealth: finalWealth, yearlyData };
 };

@@ -81,6 +81,7 @@ export const DEFAULT_MARRIAGE_PLAN = {
     adjustments: [],
   },
   buyHouse: true,
+  yearOfHousePurchase: 2, // 집 구매 시점 (0 = 시뮬레이션 시작, 결혼과 별개)
   housePrice: 45000, // 만원
   downPayment: 10000, // 초기 자기자본 (만원)
   loanAmount: 35000, // 대출금 (자동 계산: housePrice - downPayment)
@@ -89,7 +90,7 @@ export const DEFAULT_MARRIAGE_PLAN = {
   repaymentType: 'equalPrincipal', // 'equalPrincipal' (원금균등), 'equalPayment' (원리금균등)
   houseAppreciationRate: 2.0, // 주택 가격 연간 상승률 (%)
   prepayEnabled: false,
-  prepayYear: 5, // 결혼 후 몇 년 뒤 일시 상환
+  prepayYear: 5, // 집 구매 후 몇 년 뒤 일시 상환
 };
 
 export const DEFAULT_RETIREMENT_PLAN = {

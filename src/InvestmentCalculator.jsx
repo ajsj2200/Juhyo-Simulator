@@ -16,6 +16,12 @@ import {
   DEFAULT_CRISIS_SCENARIO,
 } from './constants/defaults';
 import {
+  SP500_ANNUAL_RETURNS,
+  SP500_RETURNS_ARRAY,
+  SP500_YEARS,
+  SP500_STATS,
+} from './constants/sp500History';
+import {
   calculateWealthWithMarriage,
   calculateWealth,
   calculateSavingsRate,
@@ -23,6 +29,8 @@ import {
   calculateHouseValue,
   getLoanPaymentAtMonth,
   generateLoanSchedule,
+  calculateWealthWithHistoricalReturns,
+  calculateWealthWithMarriageHistorical,
 } from './utils/calculations';
 import InputGroup from './components/InputGroup';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -88,6 +96,10 @@ const InvestmentCalculator = () => {
   const [savedPresets, setSavedPresets] = useState([]);
   const [presetName, setPresetName] = useState('');
   const [previewPreset, setPreviewPreset] = useState(null);
+
+  // 히스토리컬 수익률 모드
+  const [useHistoricalReturns, setUseHistoricalReturns] = useState(false);
+  const [historicalStartYear, setHistoricalStartYear] = useState(1975);
 
   useEffect(() => {
     setSavedPresets(loadLocalPresets());
@@ -177,6 +189,20 @@ const InvestmentCalculator = () => {
     }));
   };
 
+  // 히스토리컬 수익률 배열 생성 (선택된 시작 연도부터)
+  const historicalReturns = useMemo(() => {
+    if (!useHistoricalReturns) return [];
+    const startIndex = SP500_YEARS.indexOf(historicalStartYear);
+    if (startIndex === -1) return SP500_RETURNS_ARRAY;
+    // 시작 연도부터 끝까지 + 부족하면 처음부터 순환
+    const result = [];
+    for (let i = 0; i < years + 1; i++) {
+      const index = (startIndex + i) % SP500_RETURNS_ARRAY.length;
+      result.push(SP500_RETURNS_ARRAY[index]);
+    }
+    return result;
+  }, [useHistoricalReturns, historicalStartYear, years]);
+
   // 차트 데이터 계산
   const chartData = useMemo(() => {
     const data = [];
@@ -199,10 +225,11 @@ const InvestmentCalculator = () => {
               otherUseCompound
         ) / 10000
           : null;
+      const chartYearOfHousePurchase = marriagePlan.yearOfHousePurchase ?? marriagePlan.yearOfMarriage;
       const remainingLoan =
-        marriagePlan.enabled && marriagePlan.buyHouse && year >= marriagePlan.yearOfMarriage
+        marriagePlan.buyHouse && year >= chartYearOfHousePurchase
           ? (() => {
-              const monthsSinceLoan = Math.max(0, Math.floor((year - marriagePlan.yearOfMarriage) * 12));
+              const monthsSinceLoan = Math.max(0, Math.floor((year - chartYearOfHousePurchase) * 12));
               if (monthsSinceLoan >= marriagePlan.loanYears * 12) return 0;
               const info = getLoanPaymentAtMonth(
                 marriagePlan.loanAmount,
@@ -214,22 +241,39 @@ const InvestmentCalculator = () => {
               return Math.max(0, info.remainingPrincipal) / 10000;
             })()
           : 0;
-      data.push({
-        year,
-        you:
-          calculateWealthWithMarriage(you, year, marriagePlan, retirementPlan, crisis, true) / 10000,
-        youNoMarriage: calculateWealth(
+
+      // 히스토리컬 모드일 때
+      let youWealth, youNoMarriageWealth, otherWealth;
+      let yearReturnRate = null;
+
+      if (useHistoricalReturns && historicalReturns.length > 0) {
+        yearReturnRate = year > 0 ? historicalReturns[year - 1] : null;
+
+        // 히스토리컬 수익률로 계산
+        const youResult = calculateWealthWithMarriageHistorical(
+          you,
+          year,
+          marriagePlan,
+          retirementPlan,
+          historicalReturns,
+          true
+        );
+        youWealth = youResult.wealth / 10000;
+
+        const youNoMarriageResult = calculateWealthWithHistoricalReturns(
           you.initial,
           you.monthly,
-          you.rate,
+          historicalReturns,
           year,
           you.monthlyGrowthRate,
           you,
           retirementPlan,
-          crisis,
           true
-        ) / 10000,
-        other: calculateWealth(
+        );
+        youNoMarriageWealth = youNoMarriageResult.wealth / 10000;
+
+        // 비교 대상은 항상 자기 고정 수익률 사용
+        otherWealth = calculateWealth(
           other.initial,
           other.monthly,
           other.rate,
@@ -239,14 +283,47 @@ const InvestmentCalculator = () => {
           retirementPlan,
           crisis,
           otherUseCompound
-        ) / 10000,
+        ) / 10000;
+      } else {
+        // 기존 고정 수익률로 계산
+        youWealth = calculateWealthWithMarriage(you, year, marriagePlan, retirementPlan, crisis, true) / 10000;
+        youNoMarriageWealth = calculateWealth(
+          you.initial,
+          you.monthly,
+          you.rate,
+          year,
+          you.monthlyGrowthRate,
+          you,
+          retirementPlan,
+          crisis,
+          true
+        ) / 10000;
+        otherWealth = calculateWealth(
+          other.initial,
+          other.monthly,
+          other.rate,
+          year,
+          other.monthlyGrowthRate,
+          other,
+          retirementPlan,
+          crisis,
+          otherUseCompound
+        ) / 10000;
+      }
+
+      data.push({
+        year,
+        you: youWealth,
+        youNoMarriage: youNoMarriageWealth,
+        other: otherWealth,
         house: houseValue,
         remainingLoan,
         spouseWealth: spouseOnlyWealth,
+        returnRate: yearReturnRate,
       });
     }
     return data;
-  }, [you, other, years, marriagePlan, retirementPlan, crisis, otherUseCompound]);
+  }, [you, other, years, marriagePlan, retirementPlan, crisis, otherUseCompound, useHistoricalReturns, historicalReturns]);
 
   const loanCalcResult = useMemo(() => {
     const { amount, rate, years, type } = loanCalc;
@@ -337,14 +414,15 @@ const InvestmentCalculator = () => {
   const effectiveLoanYears = marriagePlan.prepayEnabled
     ? Math.min(marriagePlan.prepayYear, marriagePlan.loanYears)
     : marriagePlan.loanYears;
-  const loanCompletionYear = marriagePlan.yearOfMarriage + effectiveLoanYears;
+  const yearOfHousePurchase = marriagePlan.yearOfHousePurchase ?? marriagePlan.yearOfMarriage;
+  const loanCompletionYear = yearOfHousePurchase + effectiveLoanYears;
   const houseValueFinal =
-    marriagePlan.buyHouse && marriagePlan.enabled ? calculateHouseValue(marriagePlan, years) / 10000 : 0;
+    marriagePlan.buyHouse ? calculateHouseValue(marriagePlan, years) / 10000 : 0;
   const remainingLoanFinal =
-    marriagePlan.buyHouse && marriagePlan.enabled && years >= marriagePlan.yearOfMarriage
+    marriagePlan.buyHouse && years >= yearOfHousePurchase
       ? (() => {
           if (years >= loanCompletionYear) return 0;
-          const monthsSinceLoan = Math.floor((years - marriagePlan.yearOfMarriage) * 12);
+          const monthsSinceLoan = Math.floor((years - yearOfHousePurchase) * 12);
           const info = getLoanPaymentAtMonth(
             marriagePlan.loanAmount,
             marriagePlan.loanRate,
@@ -408,7 +486,7 @@ ${
 • 상환방식: ${marriagePlan.repaymentType === 'equalPayment' ? '원리금균등' : marriagePlan.repaymentType === 'equalPrincipal' ? '원금균등' : '체증식'}
 • 초기 월 상환액: ${initialMonthlyPayment.toFixed(0)}만원
 • 주택 가격 상승률: ${marriagePlan.houseAppreciationRate}%/년
-• 대출 완료: 결혼 ${effectiveLoanYears}년 후 (투자 시작 ${loanCompletionYear}년 후)
+• 대출 완료: 집 구매 ${effectiveLoanYears}년 후 (투자 시작 ${loanCompletionYear}년 후)
 • 현재 집 가치: ${houseValueFinal.toFixed(2)}억
 • 대출 잔액: ${remainingLoanFinal.toFixed(2)}억`
     : `
@@ -837,9 +915,9 @@ ${marriagePlan.spouse.adjustments?.length ? `• 배우자 투자액 변경: ${m
           )}
         </div>
 
-        {/* 기간 슬라이더 + 위기 시나리오 */}
+        {/* 기간 슬라이더 + 히스토리컬 모드 + 위기 시나리오 */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-8">
-          <div className="bg-white p-6 rounded-lg shadow lg:col-span-2">
+          <div className="bg-white p-6 rounded-lg shadow">
             <label className="block text-lg font-medium text-gray-700 mb-4">
               투자 기간: {years}년
             </label>
@@ -855,6 +933,73 @@ ${marriagePlan.spouse.adjustments?.length ? `• 배우자 투자액 변경: ${m
               <span>1년</span>
               <span>35년</span>
               <span>70년</span>
+            </div>
+          </div>
+
+          {/* 히스토리컬 수익률 모드 */}
+          <div className="bg-white p-6 rounded-lg shadow border border-green-100">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="text-sm font-semibold text-gray-700">S&P 500 과거 수익률</p>
+                <p className="text-xs text-gray-500">실제 역사적 수익률로 시뮬레이션</p>
+              </div>
+              <label className="inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="sr-only"
+                  checked={useHistoricalReturns}
+                  onChange={(e) => setUseHistoricalReturns(e.target.checked)}
+                />
+                <div
+                  className={`w-11 h-6 rounded-full transition-all ${
+                    useHistoricalReturns ? 'bg-green-500' : 'bg-gray-300'
+                  }`}
+                >
+                  <div
+                    className={`w-5 h-5 bg-white rounded-full shadow transform transition-transform ${
+                      useHistoricalReturns ? 'translate-x-5' : 'translate-x-1'
+                    }`}
+                  />
+                </div>
+              </label>
+            </div>
+            <div className={`${useHistoricalReturns ? 'opacity-100' : 'opacity-60'} space-y-2`}>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">시작 연도</label>
+                <select
+                  value={historicalStartYear}
+                  onChange={(e) => setHistoricalStartYear(Number(e.target.value))}
+                  disabled={!useHistoricalReturns}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                >
+                  {SP500_YEARS.map((year) => (
+                    <option key={year} value={year}>
+                      {year}년 ({SP500_ANNUAL_RETURNS[year] >= 0 ? '+' : ''}{SP500_ANNUAL_RETURNS[year].toFixed(1)}%)
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="text-xs text-gray-600 bg-green-50 p-2 rounded">
+                <p className="font-semibold mb-1">선택 기간 수익률:</p>
+                {useHistoricalReturns && historicalReturns.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {historicalReturns.slice(0, Math.min(10, years)).map((r, i) => (
+                      <span
+                        key={i}
+                        className={`px-1 py-0.5 rounded text-[10px] ${
+                          r >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                        }`}
+                      >
+                        {r >= 0 ? '+' : ''}{r.toFixed(0)}%
+                      </span>
+                    ))}
+                    {years > 10 && <span className="text-gray-400">...</span>}
+                  </div>
+                )}
+              </div>
+              <p className="text-[11px] text-gray-500">
+                평균: {SP500_STATS.average.toFixed(1)}% | 최고: +{SP500_STATS.max.toFixed(1)}% ({SP500_STATS.maxYear}) | 최저: {SP500_STATS.min.toFixed(1)}% ({SP500_STATS.minYear})
+              </p>
             </div>
           </div>
 

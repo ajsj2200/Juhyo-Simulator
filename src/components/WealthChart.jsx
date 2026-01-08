@@ -74,11 +74,26 @@ const WealthChart = ({
     return min;
   }, Infinity);
   const yDomainMin = Number.isFinite(minPositive) ? Math.max(minPositive * 0.5, 0.001) : 0.001;
+  // 데이터 최솟값 계산 (음수 허용)
+  const dataMin = chartData.reduce((min, point) => {
+    ['you', 'youNoMarriage', 'other'].forEach((key) => {
+      const val = point[key];
+      if (val !== null && val !== undefined && val < min) min = val;
+    });
+    return min;
+  }, 0);
   const sanitizedData = chartData.map((d) => {
-    const clamp = (val) => {
+    // 로그 스케일용: 음수/0 → 작은 양수로 대체
+    const clampForLog = (val) => {
       if (val === null || val === undefined) return null;
       return val > 0 ? val : yDomainMin;
     };
+    // 선형 스케일용: 음수 허용
+    const clampForLinear = (val) => {
+      if (val === null || val === undefined) return null;
+      return val;
+    };
+    const clamp = useLogScale ? clampForLog : clampForLinear;
     const base = {
       ...d,
       you: clamp(d.you),
@@ -210,7 +225,7 @@ const WealthChart = ({
             tickLine={false}
             axisLine={{ stroke: '#e5e7eb' }}
             scale={useLogScale ? 'log' : 'linear'}
-            domain={useLogScale ? [yDomainMin, 'auto'] : [0, 'auto']}
+            domain={useLogScale ? [yDomainMin, 'auto'] : [dataMin < 0 ? dataMin * 1.1 : 0, 'auto']}
             allowDataOverflow={useLogScale}
             tickFormatter={(value) => value.toFixed(0)}
             label={{ value: '자산 (억원)', angle: -90, position: 'insideLeft', fill: '#6b7280' }}

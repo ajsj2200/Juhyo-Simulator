@@ -22,7 +22,7 @@ const PersonCard = ({ person, setPerson, color, showRetirement = false }) => {
         label="초기 자산"
         value={person.initial}
         onChange={(v) => setPerson({ ...person, initial: v })}
-        min={0}
+        min={-100000}
         max={100000}
         step={100}
         unit="만원"

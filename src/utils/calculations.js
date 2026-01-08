@@ -339,8 +339,8 @@ export const calculateWealthWithMarriage = (
           }
         }
 
-        monthlyInvestment = Math.max(0, monthlyInvestment);
-        if (monthlyInvestment > 0) {
+        // 대출 상환 등으로 투자 여력이 음수일 수 있으므로 클램프하지 않음
+        if (monthlyInvestment !== 0) {
           const totalContr = youContr + spouseContr;
           const youShare = totalContr > 0 ? youContr / totalContr : 1;
           const spouseShare = totalContr > 0 ? spouseContr / totalContr : 0;
@@ -408,11 +408,11 @@ export const calculateWealthWithMarriage = (
         const youRatio = totalAfterGrowth > 0 ? youWealth / totalAfterGrowth : 0.5;
         const youExpense = adjustedExpense * youRatio;
         const spouseExpense = adjustedExpense * (1 - youRatio);
-        youWealth = Math.max(0, youWealth - youExpense);
-        spouseWealth = Math.max(0, spouseWealth - spouseExpense);
+        youWealth = youWealth - youExpense;
+        spouseWealth = spouseWealth - spouseExpense;
         if (!useCompound) {
-          principalYou = Math.max(0, principalYou - youExpense);
-          principalSpouse = Math.max(0, principalSpouse - spouseExpense);
+          principalYou = principalYou - youExpense;
+          principalSpouse = principalSpouse - spouseExpense;
         }
       }
     }
@@ -519,9 +519,8 @@ export const calculateWealth = (initial, monthly, annualRate, years, monthlyGrow
 
         // 생활비만 인출
         wealth -= adjustedExpense;
-        wealth = Math.max(0, wealth);
         if (!useCompound) {
-          principalBase = Math.max(0, principalBase - adjustedExpense);
+          principalBase = principalBase - adjustedExpense;
         }
       }
     }

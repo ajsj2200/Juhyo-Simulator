@@ -720,6 +720,34 @@ ${jepqFinancialIndependenceYear !== null ? `\n💰 JEPQ 경제적 자유\n• ${
 `
       : '';
     
+    const portfolioInfo = portfolio.enabled
+  ? `
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📦 포트폴리오 구성
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• VOO ${portfolio.allocations.voo}% | SCHD ${portfolio.allocations.schd}% | BND ${portfolio.allocations.bond}% | CASH ${portfolio.allocations.cash}%
+• 기대 수익률(가중): ${portfolio.enabled ? getExpectedPortfolioReturn(portfolio.allocations).toFixed(1) : you.rate}%
+${portfolio.rebalanceEnabled ? `• 리밸런싱: ${portfolio.rebalanceFrequency}개월 주기` : '• 리밸런싱: 없음'}
+${portfolio.monteCarloEnabled ? '• 포트폴리오 MC: 사용' : '• 포트폴리오 MC: 사용 안 함'}
+`
+  : '';
+
+    const monteCarloInfo = mcResult
+  ? `
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🎲 몬테카를로 (S&P 500 셔플)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• 시뮬레이션: ${mcResult.iterations}회 (seed: ${mcResult.seed})
+• 5% (워스트): ${(mcResult.p5 / 10000).toFixed(2)}억
+• 50% (중앙값): ${(mcResult.median / 10000).toFixed(2)}억
+• 95% (베스트): ${(mcResult.p95 / 10000).toFixed(2)}억
+• 평균: ${(mcResult.mean / 10000).toFixed(2)}억
+• 파산 확률: ${(mcResult.belowZeroProbability * 100).toFixed(2)}%
+`
+  : '';
+
     const crisisInfo = crisis.enabled
       ? `
 
@@ -748,6 +776,8 @@ ${jepqFinancialIndependenceYear !== null ? `\n💰 JEPQ 경제적 자유\n• ${
 ${you.adjustments?.length ? `• 투자액 변경: ${you.adjustments.map((a) => `${a.year}년→${a.monthly}만원`).join(', ')}` : ''}
 ${marriageInfo}${retirementInfo}
 ${crisisInfo}
+${portfolioInfo}
+${monteCarloInfo}
 ${years}년 후:
 • 총 자산: ${finalYou.toFixed(2)}억원
 • 연 자산소득: ${youIncome.toFixed(0)}만원 (월 ${(youIncome / 12).toFixed(0)}만원)
@@ -790,9 +820,13 @@ ${marriagePlan.enabled ? `• 결혼 효과: ${marriageDifference >= 0 ? '+' : '
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 연도 | ${you.name}${marriagePlan.enabled ? '(결혼)' : ''} ${marriagePlan.enabled ? `| ${you.name}(독신)` : ''} | ${other.name}
 ${'─'.repeat(60)}
-${chartData.map((data, idx) => {
+${chartDataWithMonteCarlo.map((data, idx) => {
   if (idx % Math.max(1, Math.floor(years / 20)) !== 0 && idx !== years) return ''; // 최대 20개 데이터 포인트
-  return `${data.year.toString().padEnd(4)} | ${data.you.toFixed(2).padStart(8)}${marriagePlan.enabled ? ` | ${data.youNoMarriage.toFixed(2).padStart(8)}` : ''}  | ${data.other.toFixed(2).padStart(8)}`;
+  const baseRow = `${data.year.toString().padEnd(4)} | ${data.you.toFixed(2).padStart(8)}${marriagePlan.enabled ? ` | ${data.youNoMarriage.toFixed(2).padStart(8)}` : ''}  | ${data.other.toFixed(2).padStart(8)}`;
+  if (data.mc_p50 != null) {
+    return `${baseRow}  | MC p50 ${data.mc_p50.toFixed(2)} / p10 ${data.mc_p10?.toFixed(2) ?? '-'} / p90 ${data.mc_p90?.toFixed(2) ?? '-'}`;
+  }
+  return baseRow;
 }).filter(Boolean).join('\n')}
 
 주요 시점:

@@ -107,6 +107,8 @@ const InvestmentCalculator = () => {
   const [mcResult, setMcResult] = useState(null);
   const [mcChartData, setMcChartData] = useState([]);
 
+  const mcHistogramTotal = useMemo(() => mcChartData.reduce((sum, d) => sum + (d.count || 0), 0), [mcChartData]);
+
   useEffect(() => {
     if (!mcResult?.samples?.length) {
       setMcChartData([]);
@@ -227,9 +229,21 @@ const InvestmentCalculator = () => {
     }
   };
 
+  const generateMonteCarloSeed = () => {
+    try {
+      if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+        return crypto.getRandomValues(new Uint32Array(1))[0];
+      }
+    } catch {
+      // ignore
+    }
+    return Math.floor(Math.random() * 2 ** 32);
+  };
+
   const handleRunMonteCarlo = () => {
     const iter = Math.max(100, Math.min(mcOptions.iterations || 2000, 20000));
-    const seed = mcOptions.seed || Date.now();
+    const seed = generateMonteCarloSeed();
+    setMcOptions((prev) => ({ ...prev, seed }));
     // calculateWealthWithMarriageHistorical 내부에서 /100 처리하므로 % 단위 그대로 전달
     const returns = SP500_RETURNS_ARRAY;
     const res = runMonteCarloPlan(you, years, marriagePlan, retirementPlan, returns, {
@@ -650,6 +664,7 @@ const InvestmentCalculator = () => {
 
 👫 배우자 정보
 • 이름: ${marriagePlan.spouse.name}
+• 초기 자산: ${(marriagePlan.spouse.initial || 0).toLocaleString()}만원
 • 세후 월급: ${marriagePlan.spouse.salary.toLocaleString()}만원
 • 월 생활비: ${marriagePlan.spouse.expense?.toLocaleString?.() || marriagePlan.spouse.expense}만원
 • 월 투자액: ${marriagePlan.spouse.monthly.toLocaleString()}만원 (저축률 ${((marriagePlan.spouse.monthly / marriagePlan.spouse.salary) * 100).toFixed(1)}%)
@@ -1165,12 +1180,23 @@ ${chartDataWithMonteCarlo.map((data, idx) => {
                       />
                       <YAxis tick={{ fontSize: 10 }} />
                       <Tooltip
-                        formatter={(v) => [`${v}회`, '빈도']}
+                        formatter={(v) => {
+                          const count = Number(v) || 0;
+                          const pct = mcHistogramTotal > 0 ? (count / mcHistogramTotal) * 100 : 0;
+                          return [`${count}회 (${pct.toFixed(2)}%)`, '빈도'];
+                        }}
                         labelFormatter={(l) => `구간: ${l}`}
                       />
                       <Bar dataKey="count" fill="#6366f1" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
+                </div>
+              )}
+              {mcChartData.length > 0 && (
+                <div className="mt-2 text-xs text-gray-500 leading-relaxed">
+                  이 히스토그램은 “최종 순자산(집 포함, 대출 차감)”의 분포입니다. 극단적으로 낮은 값(왼쪽 꼬리)은
+                  은퇴 후 인출 구간에 하락장이 겹치거나, 결혼/주택 이벤트 직후 하락장이 겹쳐 현금흐름이 불리해지는
+                  일부 시나리오(꼬리 경로)에서 발생할 수 있습니다.
                 </div>
               )}
               {mcChartData.length === 0 && (

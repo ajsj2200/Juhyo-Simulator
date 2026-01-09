@@ -6,3 +6,5 @@ export { default as MarriagePlanSection } from './MarriagePlanSection';
 export { default as RetirementPlanSection } from './RetirementPlanSection';
 export { default as WealthChart } from './WealthChart';
 export { default as InsightsSection } from './InsightsSection';
+export { default as PortfolioSection } from './PortfolioSection';
+

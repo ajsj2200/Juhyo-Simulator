@@ -7,6 +7,7 @@ import {
   RetirementPlanSection,
   WealthChart,
   InsightsSection,
+  PortfolioSection,
 } from './components';
 import {
   DEFAULT_PERSON,
@@ -22,6 +23,15 @@ import {
   SP500_STATS,
 } from './constants/sp500History';
 import {
+  SCHD_ANNUAL_RETURNS,
+  BND_ANNUAL_RETURNS,
+  CASH_ANNUAL_RETURN,
+  DEFAULT_PORTFOLIO,
+  ASSET_INFO,
+  getExpectedPortfolioReturn,
+  runMonteCarloSimulation,
+} from './constants/assetData';
+import {
   calculateWealthWithMarriage,
   calculateWealth,
   calculateSavingsRate,
@@ -31,6 +41,7 @@ import {
   generateLoanSchedule,
   calculateWealthWithHistoricalReturns,
   calculateWealthWithMarriageHistorical,
+  calculateWealthWithPortfolio,
 } from './utils/calculations';
 import InputGroup from './components/InputGroup';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -100,6 +111,9 @@ const InvestmentCalculator = () => {
   // 히스토리컬 수익률 모드
   const [useHistoricalReturns, setUseHistoricalReturns] = useState(false);
   const [historicalStartYear, setHistoricalStartYear] = useState(1975);
+
+  // 포트폴리오 구성
+  const [portfolio, setPortfolio] = useState(DEFAULT_PORTFOLIO);
 
   useEffect(() => {
     setSavedPresets(loadLocalPresets());
@@ -206,6 +220,20 @@ const InvestmentCalculator = () => {
   // 차트 데이터 계산
   const chartData = useMemo(() => {
     const data = [];
+    
+    // 포트폴리오 활성화 시 예상 수익률 계산
+    const portfolioRate = portfolio.enabled 
+      ? getExpectedPortfolioReturn(portfolio.allocations) 
+      : you.rate;
+    
+    // 포트폴리오용 자산 수익률 배열 생성 (히스토리컬 모드용)
+    const assetReturnsForPortfolio = {
+      voo: historicalReturns,
+      schd: Object.values(SCHD_ANNUAL_RETURNS),
+      bond: Object.values(BND_ANNUAL_RETURNS),
+      cash: CASH_ANNUAL_RETURN,
+    };
+    
     for (let year = 0; year <= years; year++) {
       const houseValue =
         marriagePlan.buyHouse && marriagePlan.enabled
@@ -249,21 +277,50 @@ const InvestmentCalculator = () => {
       if (useHistoricalReturns && historicalReturns.length > 0) {
         yearReturnRate = year > 0 ? historicalReturns[year - 1] : null;
 
-        // 히스토리컬 수익률로 계산
-        const youResult = calculateWealthWithMarriageHistorical(
-          you,
-          year,
-          marriagePlan,
-          retirementPlan,
-          historicalReturns,
-          true
-        );
-        youWealth = youResult.wealth / 10000;
+        // 포트폴리오 모드일 때
+        if (portfolio.enabled) {
+          // 포트폴리오 기반 자산 계산
+          const portfolioResult = calculateWealthWithPortfolio(
+            you.initial,
+            you.monthly,
+            portfolio,
+            assetReturnsForPortfolio,
+            year,
+            you.monthlyGrowthRate,
+            you,
+            retirementPlan,
+            true
+          );
+          youWealth = portfolioResult.wealth / 10000;
+          
+          // 포트폴리오 가중 수익률 계산
+          if (year > 0) {
+            const vooReturn = historicalReturns[year - 1] ?? 10;
+            const schdReturn = Object.values(SCHD_ANNUAL_RETURNS)[(year - 1) % Object.keys(SCHD_ANNUAL_RETURNS).length] ?? 8;
+            const bondReturn = Object.values(BND_ANNUAL_RETURNS)[(year - 1) % Object.keys(BND_ANNUAL_RETURNS).length] ?? 4;
+            yearReturnRate = 
+              (portfolio.allocations.voo / 100) * vooReturn +
+              (portfolio.allocations.schd / 100) * schdReturn +
+              (portfolio.allocations.bond / 100) * bondReturn +
+              (portfolio.allocations.cash / 100) * CASH_ANNUAL_RETURN;
+          }
+        } else {
+          // 히스토리컬 수익률로 계산
+          const youResult = calculateWealthWithMarriageHistorical(
+            you,
+            year,
+            marriagePlan,
+            retirementPlan,
+            historicalReturns,
+            true
+          );
+          youWealth = youResult.wealth / 10000;
+        }
 
         const youNoMarriageResult = calculateWealthWithHistoricalReturns(
           you.initial,
           you.monthly,
-          historicalReturns,
+          portfolio.enabled ? historicalReturns : historicalReturns, // 둘 다 같지만 명시
           year,
           you.monthlyGrowthRate,
           you,
@@ -285,12 +342,35 @@ const InvestmentCalculator = () => {
           otherUseCompound
         ) / 10000;
       } else {
-        // 기존 고정 수익률로 계산
-        youWealth = calculateWealthWithMarriage(you, year, marriagePlan, retirementPlan, crisis, true) / 10000;
+        // 고정 수익률 모드
+        if (portfolio.enabled) {
+          // 포트폴리오 활성화 시: 포트폴리오 예상 수익률 적용
+          const portfolioResult = calculateWealthWithPortfolio(
+            you.initial,
+            you.monthly,
+            portfolio,
+            {
+              voo: Array(years + 1).fill(ASSET_INFO.voo.expectedReturn),
+              schd: Array(years + 1).fill(ASSET_INFO.schd.expectedReturn),
+              bond: Array(years + 1).fill(ASSET_INFO.bond.expectedReturn),
+              cash: ASSET_INFO.cash.expectedReturn,
+            },
+            year,
+            you.monthlyGrowthRate,
+            you,
+            retirementPlan,
+            true
+          );
+          youWealth = portfolioResult.wealth / 10000;
+          yearReturnRate = portfolioRate;
+        } else {
+          youWealth = calculateWealthWithMarriage(you, year, marriagePlan, retirementPlan, crisis, true) / 10000;
+        }
+        
         youNoMarriageWealth = calculateWealth(
           you.initial,
           you.monthly,
-          you.rate,
+          portfolio.enabled ? portfolioRate : you.rate,
           year,
           you.monthlyGrowthRate,
           you,
@@ -323,7 +403,38 @@ const InvestmentCalculator = () => {
       });
     }
     return data;
-  }, [you, other, years, marriagePlan, retirementPlan, crisis, otherUseCompound, useHistoricalReturns, historicalReturns]);
+  }, [you, other, years, marriagePlan, retirementPlan, crisis, otherUseCompound, useHistoricalReturns, historicalReturns, portfolio]);
+
+  // 몬테카를로 시뮬레이션 결과
+  const monteCarloData = useMemo(() => {
+    if (!portfolio.enabled || !portfolio.monteCarloEnabled) return null;
+    
+    const result = runMonteCarloSimulation(
+      you.initial,
+      you.monthly,
+      portfolio.allocations,
+      years,
+      you.monthlyGrowthRate,
+      500
+    );
+    
+    return result;
+  }, [you.initial, you.monthly, portfolio.allocations, portfolio.enabled, portfolio.monteCarloEnabled, years, you.monthlyGrowthRate]);
+
+  // 몬테카를로 밴드가 포함된 차트 데이터
+  const chartDataWithMonteCarlo = useMemo(() => {
+    if (!monteCarloData) return chartData;
+    
+    return chartData.map((d, i) => ({
+      ...d,
+      mc_p10: monteCarloData.percentiles.p10[i] / 10000,
+      mc_p25: monteCarloData.percentiles.p25[i] / 10000,
+      mc_p50: monteCarloData.percentiles.p50[i] / 10000,
+      mc_p75: monteCarloData.percentiles.p75[i] / 10000,
+      mc_p90: monteCarloData.percentiles.p90[i] / 10000,
+      mc_mean: monteCarloData.percentiles.mean[i] / 10000,
+    }));
+  }, [chartData, monteCarloData]);
 
   const loanCalcResult = useMemo(() => {
     const { amount, rate, years, type } = loanCalc;
@@ -1088,6 +1199,14 @@ ${marriagePlan.spouse.adjustments?.length ? `• 배우자 투자액 변경: ${m
           retireYearAsset={retireYearAsset}
         />
 
+        {/* 포트폴리오 구성 섹션 */}
+        <div className="mb-8">
+          <PortfolioSection
+            portfolio={portfolio}
+            setPortfolio={setPortfolio}
+          />
+        </div>
+
         {/* 결과 요약 */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <StatCard
@@ -1148,7 +1267,7 @@ ${marriagePlan.spouse.adjustments?.length ? `• 배우자 투자액 변경: ${m
 
         {/* 차트 */}
         <WealthChart
-          chartData={chartData}
+          chartData={chartDataWithMonteCarlo}
           you={you}
           other={other}
           marriagePlan={marriagePlan}
@@ -1165,6 +1284,7 @@ ${marriagePlan.spouse.adjustments?.length ? `• 배우자 투자액 변경: ${m
           useHouseInChart={useHouseInChart}
           onToggleHouseInChart={setUseHouseInChart}
           inflationRate={retirementPlan.inflationRate}
+          monteCarloEnabled={portfolio.enabled && portfolio.monteCarloEnabled}
         />
 
         {/* 인사이트 */}

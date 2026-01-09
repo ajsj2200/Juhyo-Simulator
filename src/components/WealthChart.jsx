@@ -56,6 +56,7 @@ const WealthChart = ({
   onToggleRealAsset,
   useHouseInChart = true,
   onToggleHouseInChart,
+  monteCarloEnabled = false,
 }) => {
   const effectiveRetireYear =
     marriagePlan.enabled && retirementPlan.enabled
@@ -208,6 +209,15 @@ const WealthChart = ({
               <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.28} />
               <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.04} />
             </linearGradient>
+            {/* Monte Carlo 밴드 그라데이션 */}
+            <linearGradient id="mcBandGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#a855f7" stopOpacity={0.3} />
+              <stop offset="95%" stopColor="#a855f7" stopOpacity={0.05} />
+            </linearGradient>
+            <linearGradient id="mcBandInnerGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#c084fc" stopOpacity={0.4} />
+              <stop offset="95%" stopColor="#c084fc" stopOpacity={0.1} />
+            </linearGradient>
           </defs>
 
           <CartesianGrid strokeDasharray="2 6" stroke="#e5e7eb" />
@@ -329,6 +339,69 @@ const WealthChart = ({
                 fill: '#b45309',
                 fontSize: 12,
               }}
+            />
+          )}
+
+          {/* Monte Carlo 90% 밴드 (p10~p90) */}
+          {monteCarloEnabled && (
+            <Area
+              type="monotone"
+              dataKey="mc_p90"
+              stroke="none"
+              fill="url(#mcBandGradient)"
+              strokeWidth={0}
+              name="90% 확률 범위 (상위)"
+              legendType="none"
+              dot={false}
+            />
+          )}
+          {monteCarloEnabled && (
+            <Area
+              type="monotone"
+              dataKey="mc_p10"
+              stroke="none"
+              fill="#fff"
+              strokeWidth={0}
+              name="90% 확률 범위 (하위)"
+              legendType="none"
+              dot={false}
+            />
+          )}
+          {/* Monte Carlo 50% 밴드 (p25~p75) */}
+          {monteCarloEnabled && (
+            <Area
+              type="monotone"
+              dataKey="mc_p75"
+              stroke="none"
+              fill="url(#mcBandInnerGradient)"
+              strokeWidth={0}
+              name="50% 확률 범위 (상위)"
+              legendType="none"
+              dot={false}
+            />
+          )}
+          {monteCarloEnabled && (
+            <Area
+              type="monotone"
+              dataKey="mc_p25"
+              stroke="none"
+              fill="#fff"
+              strokeWidth={0}
+              name="50% 확률 범위 (하위)"
+              legendType="none"
+              dot={false}
+            />
+          )}
+          {/* Monte Carlo 중간값 라인 */}
+          {monteCarloEnabled && (
+            <Line
+              type="monotone"
+              dataKey="mc_p50"
+              stroke="#9333ea"
+              strokeWidth={2}
+              strokeDasharray="5 3"
+              name="중간값 (50%)"
+              dot={false}
             />
           )}
 

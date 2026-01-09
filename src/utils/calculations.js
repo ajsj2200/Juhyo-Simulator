@@ -848,3 +848,137 @@ export const calculateWealthWithMarriageHistorical = (
 
   return { wealth: finalWealth, yearlyData };
 };
+
+/**
+ * 포트폴리오 기반 자산 계산 (히스토리컬 수익률 + 자산 배분)
+ * @param {number} initial - 초기 자산
+ * @param {number} monthly - 월 투자액
+ * @param {object} portfolio - 포트폴리오 설정 { allocations, rebalanceEnabled, rebalanceFrequency }
+ * @param {object} assetReturns - 자산별 연도별 수익률 { voo, schd, bond, cash }
+ * @param {number} years - 투자 기간
+ * @param {number} monthlyGrowthRate - 월 투자액 연간 증가율
+ * @param {object} person - 개인 정보
+ * @param {object} retirement - 은퇴 계획
+ * @param {boolean} useCompound - 복리 여부
+ * @returns {object} { wealth, yearlyData }
+ */
+export const calculateWealthWithPortfolio = (
+  initial,
+  monthly,
+  portfolio,
+  assetReturns,
+  years,
+  monthlyGrowthRate = 0,
+  person = null,
+  retirement = null,
+  useCompound = true
+) => {
+  const { allocations, rebalanceEnabled, rebalanceFrequency } = portfolio;
+  
+  // 각 자산별 보유액
+  let holdings = {
+    voo: initial * (allocations.voo / 100),
+    schd: initial * (allocations.schd / 100),
+    bond: initial * (allocations.bond / 100),
+    cash: initial * (allocations.cash / 100),
+  };
+  
+  let currentMonthly = monthly;
+  const growthRate = monthlyGrowthRate / 100;
+  const yearlyData = [{ year: 0, wealth: initial, returnRate: null, holdings: { ...holdings } }];
+  
+  let monthsSinceRebalance = 0;
+
+  for (let year = 0; year < years; year++) {
+    // 해당 연도의 각 자산별 수익률
+    const vooReturn = assetReturns.voo[year] ?? 10.0;
+    const schdReturn = assetReturns.schd[year] ?? 8.0;
+    const bondReturn = assetReturns.bond[year] ?? 4.0;
+    const cashReturn = assetReturns.cash ?? 3.0;
+    
+    const monthlyRates = {
+      voo: vooReturn / 100 / 12,
+      schd: schdReturn / 100 / 12,
+      bond: bondReturn / 100 / 12,
+      cash: cashReturn / 100 / 12,
+    };
+
+    // 매년 1월(첫 달)에 투자금 증가
+    if (year > 0) {
+      currentMonthly = currentMonthly * (1 + growthRate);
+    }
+    currentMonthly = applyContributionAdjustment(year, currentMonthly, person?.adjustments);
+
+    for (let month = 0; month < 12; month++) {
+      const currentYear = year + month / 12;
+      const isRetired = retirement && retirement.enabled && person && currentYear >= person.retireYear;
+
+      if (!isRetired) {
+        // 은퇴 전: 각 자산에 수익률 적용
+        if (useCompound) {
+          holdings.voo = holdings.voo * (1 + monthlyRates.voo);
+          holdings.schd = holdings.schd * (1 + monthlyRates.schd);
+          holdings.bond = holdings.bond * (1 + monthlyRates.bond);
+          holdings.cash = holdings.cash * (1 + monthlyRates.cash);
+        }
+
+        // 월 투자액을 배분 비율대로 추가
+        holdings.voo += currentMonthly * (allocations.voo / 100);
+        holdings.schd += currentMonthly * (allocations.schd / 100);
+        holdings.bond += currentMonthly * (allocations.bond / 100);
+        holdings.cash += currentMonthly * (allocations.cash / 100);
+
+        // 리밸런싱
+        monthsSinceRebalance++;
+        if (rebalanceEnabled && monthsSinceRebalance >= rebalanceFrequency) {
+          const totalWealth = holdings.voo + holdings.schd + holdings.bond + holdings.cash;
+          holdings.voo = totalWealth * (allocations.voo / 100);
+          holdings.schd = totalWealth * (allocations.schd / 100);
+          holdings.bond = totalWealth * (allocations.bond / 100);
+          holdings.cash = totalWealth * (allocations.cash / 100);
+          monthsSinceRebalance = 0;
+        }
+      } else {
+        // 은퇴 후: 생활비 인출 (각 자산에서 비례 인출)
+        const yearsAfterRetirement = currentYear - person.retireYear;
+        const adjustedExpense = retirement.monthlyExpense *
+          Math.pow(1 + retirement.inflationRate / 100, Math.max(0, yearsAfterRetirement));
+
+        // 자산 성장
+        if (useCompound) {
+          holdings.voo = holdings.voo * (1 + monthlyRates.voo);
+          holdings.schd = holdings.schd * (1 + monthlyRates.schd);
+          holdings.bond = holdings.bond * (1 + monthlyRates.bond);
+          holdings.cash = holdings.cash * (1 + monthlyRates.cash);
+        }
+
+        // 비례 인출
+        const totalWealth = holdings.voo + holdings.schd + holdings.bond + holdings.cash;
+        if (totalWealth > 0) {
+          holdings.voo -= adjustedExpense * (holdings.voo / totalWealth);
+          holdings.schd -= adjustedExpense * (holdings.schd / totalWealth);
+          holdings.bond -= adjustedExpense * (holdings.bond / totalWealth);
+          holdings.cash -= adjustedExpense * (holdings.cash / totalWealth);
+        }
+      }
+    }
+
+    // 가중 평균 수익률 계산
+    const weightedReturn =
+      (allocations.voo / 100) * vooReturn +
+      (allocations.schd / 100) * schdReturn +
+      (allocations.bond / 100) * bondReturn +
+      (allocations.cash / 100) * cashReturn;
+
+    const totalWealth = holdings.voo + holdings.schd + holdings.bond + holdings.cash;
+    yearlyData.push({
+      year: year + 1,
+      wealth: totalWealth,
+      returnRate: weightedReturn,
+      holdings: { ...holdings },
+    });
+  }
+
+  const finalWealth = holdings.voo + holdings.schd + holdings.bond + holdings.cash;
+  return { wealth: finalWealth, yearlyData };
+};

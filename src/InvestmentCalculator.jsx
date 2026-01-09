@@ -42,9 +42,10 @@ import {
   calculateWealthWithHistoricalReturns,
   calculateWealthWithMarriageHistorical,
   calculateWealthWithPortfolio,
+  runMonteCarloPlan,
 } from './utils/calculations';
 import InputGroup from './components/InputGroup';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 
 const LOCAL_PRESET_KEY = 'vooAppCustomPresetsV1';
 
@@ -103,6 +104,53 @@ const InvestmentCalculator = () => {
   const [useRealAsset, setUseRealAsset] = useState(false);
   // 자산 차트에 주택 포함 여부
   const [useHouseInChart, setUseHouseInChart] = useState(true);
+  // 몬테카를로 (과거 수익률 셔플)
+  const [mcOptions, setMcOptions] = useState({ iterations: 2000, seed: 1234 });
+  const [mcResult, setMcResult] = useState(null);
+  const [mcChartData, setMcChartData] = useState([]);
+
+  useEffect(() => {
+    if (!mcResult?.samples?.length) {
+      setMcChartData([]);
+      return;
+    }
+    const samples = mcResult.samples;
+    // 음수나 0 이하 값 필터링 (로그 스케일용)
+    const positiveSamples = samples.filter((v) => v > 0);
+    if (positiveSamples.length === 0) {
+      setMcChartData([]);
+      return;
+    }
+    const min = positiveSamples[0];
+    const max = positiveSamples[positiveSamples.length - 1];
+    if (!Number.isFinite(min) || !Number.isFinite(max) || min <= 0) {
+      setMcChartData([]);
+      return;
+    }
+    
+    // 로그 스케일 빈: 작은 값은 세밀하게, 큰 값은 넓게
+    const bins = 18;
+    const logMin = Math.log10(min);
+    const logMax = Math.log10(max);
+    const logWidth = logMax === logMin ? 1 : (logMax - logMin) / bins;
+    const histogram = new Array(bins).fill(0);
+    
+    positiveSamples.forEach((v) => {
+      const logV = Math.log10(v);
+      const idx = logMax === logMin ? 0 : Math.min(bins - 1, Math.floor((logV - logMin) / logWidth));
+      histogram[idx] += 1;
+    });
+    
+    const data = histogram.map((count, i) => {
+      const start = Math.pow(10, logMin + i * logWidth);
+      const end = Math.pow(10, logMin + (i + 1) * logWidth);
+      return {
+        label: `${(start / 10000).toFixed(1)}~${(end / 10000).toFixed(1)}억`,
+        count,
+      };
+    });
+    setMcChartData(data);
+  }, [mcResult]);
   // 로컬 프리셋
   const [savedPresets, setSavedPresets] = useState([]);
   const [presetName, setPresetName] = useState('');
@@ -181,6 +229,19 @@ const InvestmentCalculator = () => {
     }
   };
 
+  const handleRunMonteCarlo = () => {
+    const iter = Math.max(100, Math.min(mcOptions.iterations || 2000, 20000));
+    const seed = mcOptions.seed || Date.now();
+    // calculateWealthWithMarriageHistorical 내부에서 /100 처리하므로 % 단위 그대로 전달
+    const returns = SP500_RETURNS_ARRAY;
+    const res = runMonteCarloPlan(you, years, marriagePlan, retirementPlan, returns, {
+      iterations: iter,
+      seed,
+      useCompound: true,
+    });
+    setMcResult(res);
+  };
+
   // 프리셋 적용
   const applyPreset = (presetName) => {
     const preset = PRESETS[presetName];
@@ -233,6 +294,20 @@ const InvestmentCalculator = () => {
       bond: Object.values(BND_ANNUAL_RETURNS),
       cash: CASH_ANNUAL_RETURN,
     };
+
+    // 포트폴리오 가중 히스토리컬 연수익률 (allocations 가중 평균)
+    const weightedHistoricalReturns = historicalReturns.map((_, idx) => {
+      const vooReturn = assetReturnsForPortfolio.voo[idx] ?? 10;
+      const schdReturn = assetReturnsForPortfolio.schd[idx % assetReturnsForPortfolio.schd.length] ?? 8;
+      const bondReturn = assetReturnsForPortfolio.bond[idx % assetReturnsForPortfolio.bond.length] ?? 4;
+      const cashReturn = assetReturnsForPortfolio.cash ?? 3;
+      return (
+        (portfolio.allocations.voo / 100) * vooReturn +
+        (portfolio.allocations.schd / 100) * schdReturn +
+        (portfolio.allocations.bond / 100) * bondReturn +
+        (portfolio.allocations.cash / 100) * cashReturn
+      );
+    });
     
     for (let year = 0; year <= years; year++) {
       const houseValue =
@@ -277,32 +352,24 @@ const InvestmentCalculator = () => {
       if (useHistoricalReturns && historicalReturns.length > 0) {
         yearReturnRate = year > 0 ? historicalReturns[year - 1] : null;
 
-        // 포트폴리오 모드일 때
+        // 포트폴리오 모드일 때도 결혼/다운페이 타이밍을 맞추기 위해 marriage-aware 계산으로 통일
         if (portfolio.enabled) {
-          // 포트폴리오 기반 자산 계산
-          const portfolioResult = calculateWealthWithPortfolio(
-            you.initial,
-            you.monthly,
-            portfolio,
-            assetReturnsForPortfolio,
+          const youWithPortfolio = { ...you, rate: portfolioRate };
+          const marriageWithPortfolio = {
+            ...marriagePlan,
+            spouse: { ...marriagePlan.spouse, rate: portfolioRate },
+          };
+          const youResult = calculateWealthWithMarriageHistorical(
+            youWithPortfolio,
             year,
-            you.monthlyGrowthRate,
-            you,
+            marriageWithPortfolio,
             retirementPlan,
+            weightedHistoricalReturns,
             true
           );
-          youWealth = portfolioResult.wealth / 10000;
-          
-          // 포트폴리오 가중 수익률 계산
+          youWealth = youResult.wealth / 10000;
           if (year > 0) {
-            const vooReturn = historicalReturns[year - 1] ?? 10;
-            const schdReturn = Object.values(SCHD_ANNUAL_RETURNS)[(year - 1) % Object.keys(SCHD_ANNUAL_RETURNS).length] ?? 8;
-            const bondReturn = Object.values(BND_ANNUAL_RETURNS)[(year - 1) % Object.keys(BND_ANNUAL_RETURNS).length] ?? 4;
-            yearReturnRate = 
-              (portfolio.allocations.voo / 100) * vooReturn +
-              (portfolio.allocations.schd / 100) * schdReturn +
-              (portfolio.allocations.bond / 100) * bondReturn +
-              (portfolio.allocations.cash / 100) * CASH_ANNUAL_RETURN;
+            yearReturnRate = weightedHistoricalReturns[year - 1] ?? yearReturnRate;
           }
         } else {
           // 히스토리컬 수익률로 계산
@@ -344,24 +411,20 @@ const InvestmentCalculator = () => {
       } else {
         // 고정 수익률 모드
         if (portfolio.enabled) {
-          // 포트폴리오 활성화 시: 포트폴리오 예상 수익률 적용
-          const portfolioResult = calculateWealthWithPortfolio(
-            you.initial,
-            you.monthly,
-            portfolio,
-            {
-              voo: Array(years + 1).fill(ASSET_INFO.voo.expectedReturn),
-              schd: Array(years + 1).fill(ASSET_INFO.schd.expectedReturn),
-              bond: Array(years + 1).fill(ASSET_INFO.bond.expectedReturn),
-              cash: ASSET_INFO.cash.expectedReturn,
-            },
+          // 포트폴리오 활성화 시에도 결혼/다운페이 타이밍을 반영하기 위해 marriage-aware 계산으로 통일
+          const youWithPortfolio = { ...you, rate: portfolioRate };
+          const marriageWithPortfolio = {
+            ...marriagePlan,
+            spouse: { ...marriagePlan.spouse, rate: portfolioRate },
+          };
+          youWealth = calculateWealthWithMarriage(
+            youWithPortfolio,
             year,
-            you.monthlyGrowthRate,
-            you,
+            marriageWithPortfolio,
             retirementPlan,
+            crisis,
             true
-          );
-          youWealth = portfolioResult.wealth / 10000;
+          ) / 10000;
           yearReturnRate = portfolioRate;
         } else {
           youWealth = calculateWealthWithMarriage(you, year, marriagePlan, retirementPlan, crisis, true) / 10000;
@@ -422,19 +485,30 @@ const InvestmentCalculator = () => {
   }, [you.initial, you.monthly, portfolio.allocations, portfolio.enabled, portfolio.monteCarloEnabled, years, you.monthlyGrowthRate]);
 
   // 몬테카를로 밴드가 포함된 차트 데이터
+  // 포트폴리오 모드일 때는 플랜 몬테카를로(mcResult)만 사용 (포트폴리오 MC는 결혼/주택 미반영이라 타이밍 안 맞음)
   const chartDataWithMonteCarlo = useMemo(() => {
-    if (!monteCarloData) return chartData;
-    
+    const percentiles = mcResult?.percentilesByYear;
+    console.log('[MC Debug] percentiles:', percentiles, 'mcResult:', mcResult);
+    if (!percentiles) return chartData;
+
     return chartData.map((d, i) => ({
       ...d,
-      mc_p10: monteCarloData.percentiles.p10[i] / 10000,
-      mc_p25: monteCarloData.percentiles.p25[i] / 10000,
-      mc_p50: monteCarloData.percentiles.p50[i] / 10000,
-      mc_p75: monteCarloData.percentiles.p75[i] / 10000,
-      mc_p90: monteCarloData.percentiles.p90[i] / 10000,
-      mc_mean: monteCarloData.percentiles.mean[i] / 10000,
+      mc_p10: (percentiles.p10?.[i] ?? null) !== null ? (percentiles.p10[i] / 10000) : null,
+      mc_p25: (percentiles.p25?.[i] ?? null) !== null ? (percentiles.p25[i] / 10000) : null,
+      mc_p50: (percentiles.p50?.[i] ?? null) !== null ? (percentiles.p50[i] / 10000) : null,
+      mc_p75: (percentiles.p75?.[i] ?? null) !== null ? (percentiles.p75[i] / 10000) : null,
+      mc_p90: (percentiles.p90?.[i] ?? null) !== null ? (percentiles.p90[i] / 10000) : null,
+      mc_mean: (percentiles.mean?.[i] ?? null) !== null ? (percentiles.mean[i] / 10000) : null,
     }));
-  }, [chartData, monteCarloData]);
+  }, [chartData, mcResult]);
+
+  const hasMonteCarloBand = useMemo(() => {
+    const result = chartDataWithMonteCarlo.some((d) =>
+      d.mc_p10 != null || d.mc_p25 != null || d.mc_p50 != null || d.mc_p75 != null || d.mc_p90 != null
+    );
+    console.log('[MC Debug] hasMonteCarloBand:', result, 'chartDataWithMonteCarlo[0]:', chartDataWithMonteCarlo[0]);
+    return result;
+  }, [chartDataWithMonteCarlo]);
 
   const loanCalcResult = useMemo(() => {
     const { amount, rate, years, type } = loanCalc;
@@ -916,6 +990,97 @@ ${marriagePlan.spouse.adjustments?.length ? `• 배우자 투자액 변경: ${m
           )}
         </div>
 
+        {/* 몬테카를로 (과거 수익률 셔플) */}
+        <div className="bg-white p-6 rounded-lg shadow mb-8 border border-blue-100">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-3">
+            <div>
+              <h3 className="text-lg font-bold text-gray-800">🎲 몬테카를로 (S&P500 과거 수익률 셔플)</h3>
+              <p className="text-sm text-gray-500">
+                {SP500_STATS.startYear}~{SP500_STATS.endYear} 연도별 수익률을 무작위 순서로 섞어 {years}년간 현재 시나리오(결혼/주택/은퇴 포함)를 {mcOptions.iterations}회 시뮬레이션합니다.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-end gap-3">
+              <InputGroup
+                label="시뮬레이션 횟수"
+                value={mcOptions.iterations}
+                onChange={(v) => setMcOptions((prev) => ({ ...prev, iterations: v }))}
+                min={100}
+                max={20000}
+                step={100}
+                unit="회"
+              />
+              <InputGroup
+                label="시드"
+                value={mcOptions.seed}
+                onChange={(v) => setMcOptions((prev) => ({ ...prev, seed: v }))}
+                min={1}
+                max={1_000_000_000}
+                step={1}
+                unit=""
+              />
+              <button
+                type="button"
+                onClick={handleRunMonteCarlo}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700"
+              >
+                실행
+              </button>
+            </div>
+          </div>
+          {mcResult && (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+                <div className="p-3 rounded-lg bg-blue-50 border border-blue-100">
+                  <div className="text-xs text-gray-600">5% (워스트)</div>
+                  <div className="text-lg font-bold text-blue-700">{(mcResult.p5 / 10000).toFixed(2)}억</div>
+                </div>
+                <div className="p-3 rounded-lg bg-gray-50 border border-gray-200">
+                  <div className="text-xs text-gray-600">50% (중앙값)</div>
+                  <div className="text-lg font-bold text-gray-800">{(mcResult.median / 10000).toFixed(2)}억</div>
+                </div>
+                <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-100">
+                  <div className="text-xs text-gray-600">95% (베스트)</div>
+                  <div className="text-lg font-bold text-emerald-700">{(mcResult.p95 / 10000).toFixed(2)}억</div>
+                </div>
+                <div className="p-3 rounded-lg bg-orange-50 border border-orange-100">
+                  <div className="text-xs text-gray-600">평균</div>
+                  <div className="text-lg font-bold text-orange-700">{(mcResult.mean / 10000).toFixed(2)}억</div>
+                </div>
+                <div className="p-3 rounded-lg bg-red-50 border border-red-100">
+                  <div className="text-xs text-gray-600">파산 확률</div>
+                  <div className="text-lg font-bold text-red-700">{(mcResult.belowZeroProbability * 100).toFixed(2)}%</div>
+                </div>
+              </div>
+              {mcChartData.length > 0 && (
+                <div className="mt-4 h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={mcChartData} margin={{ top: 10, right: 20, left: 0, bottom: 40 }}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis
+                        dataKey="label"
+                        angle={-45}
+                        textAnchor="end"
+                        interval={0}
+                        height={60}
+                        tick={{ fontSize: 10 }}
+                      />
+                      <YAxis tick={{ fontSize: 10 }} />
+                      <Tooltip
+                        formatter={(v) => [`${v}회`, '빈도']}
+                        labelFormatter={(l) => `구간: ${l}`}
+                      />
+                      <Bar dataKey="count" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+              {mcChartData.length === 0 && (
+                <div className="mt-3 text-sm text-gray-500">시뮬레이션을 실행하면 분포 차트가 표시됩니다.</div>
+              )}
+            </>
+          )}
+        </div>
+
         {/* 대출 계산기 */}
         <div className="bg-white p-6 rounded-lg shadow mb-8 border border-gray-100">
           <div className="flex items-center justify-between mb-4">
@@ -1284,7 +1449,7 @@ ${marriagePlan.spouse.adjustments?.length ? `• 배우자 투자액 변경: ${m
           useHouseInChart={useHouseInChart}
           onToggleHouseInChart={setUseHouseInChart}
           inflationRate={retirementPlan.inflationRate}
-          monteCarloEnabled={portfolio.enabled && portfolio.monteCarloEnabled}
+          monteCarloEnabled={hasMonteCarloBand}
         />
 
         {/* 인사이트 */}

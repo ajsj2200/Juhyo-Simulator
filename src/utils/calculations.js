@@ -28,6 +28,176 @@ export const calculateMonthlyPaymentPrincipal = (principal, annualRate, years, c
   return monthlyPrincipal + interest;
 };
 
+// 미국/글로벌 주식 시장을 가정한 실질 연 수익률 샘플(과거 급락/급등 포함, % 단위가 아니라 소수로 표현)
+// 출처가 정확한 시계열은 아니며, 몬테카를로 데모용으로 폭락/상승을 섞은 약 50년치 샘플입니다.
+export const HISTORICAL_ANNUAL_RETURNS = [
+  0.21, -0.09, 0.26, 0.15, -0.43, 0.35, 0.22, -0.17, 0.05, 0.32,
+  0.28, -0.12, 0.18, 0.11, -0.27, 0.04, 0.14, 0.07, 0.02, 0.19,
+  0.23, -0.09, 0.1, 0.06, 0.27, -0.15, 0.08, 0.13, -0.04, 0.25,
+  0.16, 0.09, 0.05, -0.2, 0.12, 0.18, 0.03, 0.21, -0.37, 0.31,
+  0.26, -0.08, 0.29, 0.17, 0.01, -0.22, 0.24, 0.19, -0.1, 0.15,
+];
+
+// 간단한 시드 기반 PRNG
+const mulberry32 = (a) => {
+  return function () {
+    let t = (a += 0x6d2b79f5);
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+};
+
+// 연 수익률(%) → 월 수익률(소수) 변환: (1+r)^(1/12)-1
+const annualPctToMonthlyRate = (annualPct) => {
+  const r = (annualPct || 0) / 100;
+  const base = 1 + r;
+  if (base <= 0) return -1;
+  return Math.pow(base, 1 / 12) - 1;
+};
+
+// 몬테카를로: 연 수익률을 부트스트랩/셔플해 누적 자산 분포 계산 (인출·결혼·대출 미포함, 적립 구간만)
+export const runMonteCarloAccumulation = (person, years, options = {}) => {
+  const {
+    iterations = 2000,
+    annualReturns = HISTORICAL_ANNUAL_RETURNS,
+    seed = Date.now(),
+  } = options;
+
+  const rng = mulberry32(seed >>> 0);
+  const results = [];
+  let belowZero = 0;
+
+  for (let i = 0; i < iterations; i++) {
+    const seq = [];
+    for (let y = 0; y < years; y++) {
+      const idx = Math.floor(rng() * annualReturns.length);
+      seq.push(annualReturns[idx]);
+    }
+
+    let wealth = person.initial;
+    let monthly = person.monthly;
+    for (let y = 0; y < years; y++) {
+      if (y > 0) {
+        monthly = monthly * (1 + (person.monthlyGrowthRate || 0) / 100);
+      }
+      monthly = applyContributionAdjustment(y, monthly, person.adjustments);
+      const monthlyRate = Math.pow(1 + seq[y], 1 / 12) - 1;
+      for (let m = 0; m < 12; m++) {
+        wealth = wealth * (1 + monthlyRate) + monthly;
+      }
+    }
+    if (wealth < 0) belowZero += 1;
+    results.push(wealth);
+  }
+
+  results.sort((a, b) => a - b);
+  const pick = (p) => {
+    const idx = Math.max(0, Math.min(results.length - 1, Math.floor(p * (results.length - 1))));
+    return results[idx];
+  };
+  const mean = results.reduce((s, v) => s + v, 0) / results.length;
+
+  return {
+    iterations,
+    seed,
+    years,
+    p5: pick(0.05),
+    median: pick(0.5),
+    p95: pick(0.95),
+    min: results[0],
+    max: results[results.length - 1],
+    mean,
+    belowZeroProbability: results.length ? belowZero / results.length : 0,
+    samples: results,
+  };
+};
+
+// 몬테카를로: 결혼/주택/은퇴 계획을 포함한 전체 플랜 시뮬레이션
+export const runMonteCarloPlan = (person, years, marriage, retirement, annualReturns, options = {}) => {
+  const {
+    iterations = 2000,
+    seed = Date.now(),
+    useCompound = true,
+  } = options;
+
+  const rng = mulberry32(seed >>> 0);
+  const results = [];
+  const yearlyWealths = Array.from({ length: years + 1 }, () => []);
+  let belowZero = 0;
+
+  for (let i = 0; i < iterations; i++) {
+    const seq = [];
+    for (let y = 0; y < years; y++) {
+      const idx = Math.floor(rng() * annualReturns.length);
+      seq.push(annualReturns[idx]);
+    }
+    const wealthResult = calculateWealthWithMarriageHistorical(
+      person,
+      years,
+      marriage,
+      retirement,
+      seq,
+      useCompound
+    );
+    const wealth = wealthResult.wealth;
+    if (wealth < 0) belowZero += 1;
+    results.push(wealth);
+
+    const path = wealthResult.yearlyData?.map((d) => d.wealth) || [];
+    for (let y = 0; y <= years; y++) {
+      yearlyWealths[y].push(path[y] ?? wealth);
+    }
+  }
+
+  results.sort((a, b) => a - b);
+  const pick = (p) => {
+    const idx = Math.max(0, Math.min(results.length - 1, Math.floor(p * (results.length - 1))));
+    return results[idx];
+  };
+  const mean = results.reduce((s, v) => s + v, 0) / results.length;
+
+  const percentilesByYear = {
+    p10: [],
+    p25: [],
+    p50: [],
+    p75: [],
+    p90: [],
+    mean: [],
+  };
+
+  const pickFromSorted = (arr, p) => {
+    const idx = Math.max(0, Math.min(arr.length - 1, Math.floor(p * (arr.length - 1))));
+    return arr[idx];
+  };
+
+  for (let y = 0; y <= years; y++) {
+    const arr = yearlyWealths[y];
+    arr.sort((a, b) => a - b);
+    percentilesByYear.p10.push(pickFromSorted(arr, 0.1));
+    percentilesByYear.p25.push(pickFromSorted(arr, 0.25));
+    percentilesByYear.p50.push(pickFromSorted(arr, 0.5));
+    percentilesByYear.p75.push(pickFromSorted(arr, 0.75));
+    percentilesByYear.p90.push(pickFromSorted(arr, 0.9));
+    percentilesByYear.mean.push(arr.reduce((s, v) => s + v, 0) / arr.length);
+  }
+
+  return {
+    iterations,
+    seed,
+    years,
+    p5: pick(0.05),
+    median: pick(0.5),
+    p95: pick(0.95),
+    min: results[0],
+    max: results[results.length - 1],
+    mean,
+    belowZeroProbability: results.length ? belowZero / results.length : 0,
+    samples: results,
+    percentilesByYear,
+  };
+};
+
 // 체증식(매월 납입액 증가) 스케줄 생성: 첫 달 이자 수준에서 시작해 월 성장률을 이진탐색으로 찾아 만기에 원금이 0이 되도록 함
 const buildIncreasingSchedule = (loanAmount, annualRate, loanYears) => {
   const months = loanYears * 12;
@@ -596,7 +766,7 @@ export const calculateWealthWithHistoricalReturns = (
   for (let year = 0; year < years; year++) {
     // 해당 연도의 수익률 (배열 순환)
     const yearReturn = annualReturns[year % annualReturns.length] || 0;
-    const monthlyRate = yearReturn / 100 / 12;
+    const monthlyRate = annualPctToMonthlyRate(yearReturn);
 
     // 매년 1월(첫 달)에 투자금 증가
     if (year > 0) {
@@ -677,12 +847,24 @@ export const calculateWealthWithMarriageHistorical = (
   const personGrowthRate = (person.monthlyGrowthRate || 0) / 100;
   const spouseGrowthRate = (marriage.spouse.monthlyGrowthRate || 0) / 100;
 
-  const yearlyData = [{ year: 0, wealth: person.initial, returnRate: null }];
+  // yearlyData[y] = y년 시뮬레이션 결과 (y년 동안 진행 후의 자산)
+  // 메인 차트의 calculateWealthWithMarriage(you, y, ...)와 동일한 시점
+  const yearlyData = [];
 
-  for (let year = 0; year < targetYear; year++) {
+  for (let year = 0; year <= targetYear; year++) {
+    // year년 시뮬레이션 결과를 저장 (year년 동안 진행 후)
+    yearlyData.push({
+      year,
+      wealth: youWealth + spouseWealth,
+      returnRate: year > 0 ? (annualReturns[(year - 1) % annualReturns.length] || 0) : null,
+    });
+
+    // targetYear까지 도달했으면 더 이상 시뮬 안함
+    if (year >= targetYear) break;
+
     const yearReturn = annualReturns[year % annualReturns.length] || 0;
-    const youRateMonthly = yearReturn / 100 / 12;
-    const spouseRateMonthly = yearReturn / 100 / 12;
+    const youRateMonthly = annualPctToMonthlyRate(yearReturn);
+    const spouseRateMonthly = annualPctToMonthlyRate(yearReturn);
 
     if (year > 0) {
       personMonthly = personMonthly * (1 + personGrowthRate);
@@ -819,12 +1001,7 @@ export const calculateWealthWithMarriageHistorical = (
         spouseWealth = spouseWealth - adjustedExpense * (1 - youRatio);
       }
     }
-
-    yearlyData.push({
-      year: year + 1,
-      wealth: youWealth + spouseWealth + (marriage.buyHouse && year + 1 >= yearOfHousePurchase ? houseValue : 0),
-      returnRate: yearReturn,
-    });
+    // yearlyData는 루프 시작 시 이미 push됨
   }
 
   let finalWealth = youWealth + spouseWealth;
@@ -897,10 +1074,10 @@ export const calculateWealthWithPortfolio = (
     const cashReturn = assetReturns.cash ?? 3.0;
     
     const monthlyRates = {
-      voo: vooReturn / 100 / 12,
-      schd: schdReturn / 100 / 12,
-      bond: bondReturn / 100 / 12,
-      cash: cashReturn / 100 / 12,
+      voo: annualPctToMonthlyRate(vooReturn),
+      schd: annualPctToMonthlyRate(schdReturn),
+      bond: annualPctToMonthlyRate(bondReturn),
+      cash: annualPctToMonthlyRate(cashReturn),
     };
 
     // 매년 1월(첫 달)에 투자금 증가

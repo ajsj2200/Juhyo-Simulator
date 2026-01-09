@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-const InputGroup = ({ label, value, onChange, min, max, step, unit }) => {
+const InputGroup = ({ label, value, onChange, unit }) => {
   const [inputValue, setInputValue] = useState(String(value));
 
   // 외부 value가 바뀌면 동기화

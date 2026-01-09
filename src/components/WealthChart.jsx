@@ -103,6 +103,12 @@ const WealthChart = ({
       house: clamp(d.house),
       spouseWealth: clamp(d.spouseWealth),
       remainingLoan: clamp(d.remainingLoan),
+      mc_p10: clamp(d.mc_p10),
+      mc_p25: clamp(d.mc_p25),
+      mc_p50: clamp(d.mc_p50),
+      mc_p75: clamp(d.mc_p75),
+      mc_p90: clamp(d.mc_p90),
+      mc_mean: clamp(d.mc_mean),
     };
     // 집 제외 옵션: 집 가치 제거, 남은 대출은 다시 더해 금융자산만 표시
     if (!useHouseInChart) {
@@ -342,54 +348,53 @@ const WealthChart = ({
             />
           )}
 
-          {/* Monte Carlo 90% 밴드 (p10~p90) */}
+          {/* Monte Carlo 밴드 - Line으로 표시 */}
           {monteCarloEnabled && (
-            <Area
+            <Line
               type="monotone"
               dataKey="mc_p90"
-              stroke="none"
-              fill="url(#mcBandGradient)"
-              strokeWidth={0}
-              name="90% 확률 범위 (상위)"
-              legendType="none"
+              stroke="#a855f7"
+              strokeWidth={1}
+              strokeDasharray="2 2"
+              name="90% (상위)"
               dot={false}
+              opacity={0.6}
             />
           )}
           {monteCarloEnabled && (
-            <Area
+            <Line
               type="monotone"
               dataKey="mc_p10"
-              stroke="none"
-              fill="#fff"
-              strokeWidth={0}
-              name="90% 확률 범위 (하위)"
-              legendType="none"
+              stroke="#a855f7"
+              strokeWidth={1}
+              strokeDasharray="2 2"
+              name="10% (하위)"
               dot={false}
+              opacity={0.6}
             />
           )}
-          {/* Monte Carlo 50% 밴드 (p25~p75) */}
           {monteCarloEnabled && (
-            <Area
+            <Line
               type="monotone"
               dataKey="mc_p75"
-              stroke="none"
-              fill="url(#mcBandInnerGradient)"
-              strokeWidth={0}
-              name="50% 확률 범위 (상위)"
-              legendType="none"
+              stroke="#c084fc"
+              strokeWidth={1.5}
+              strokeDasharray="4 2"
+              name="75%"
               dot={false}
+              opacity={0.7}
             />
           )}
           {monteCarloEnabled && (
-            <Area
+            <Line
               type="monotone"
               dataKey="mc_p25"
-              stroke="none"
-              fill="#fff"
-              strokeWidth={0}
-              name="50% 확률 범위 (하위)"
-              legendType="none"
+              stroke="#c084fc"
+              strokeWidth={1.5}
+              strokeDasharray="4 2"
+              name="25%"
               dot={false}
+              opacity={0.7}
             />
           )}
           {/* Monte Carlo 중간값 라인 */}

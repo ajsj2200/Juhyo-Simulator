@@ -29,7 +29,6 @@ import {
   DEFAULT_PORTFOLIO,
   ASSET_INFO,
   getExpectedPortfolioReturn,
-  runMonteCarloSimulation,
 } from './constants/assetData';
 import {
   calculateWealthWithMarriage,
@@ -41,7 +40,6 @@ import {
   generateLoanSchedule,
   calculateWealthWithHistoricalReturns,
   calculateWealthWithMarriageHistorical,
-  calculateWealthWithPortfolio,
   runMonteCarloPlan,
 } from './utils/calculations';
 import InputGroup from './components/InputGroup';
@@ -238,6 +236,7 @@ const InvestmentCalculator = () => {
       iterations: iter,
       seed,
       useCompound: true,
+      includeSamples: true,
     });
     setMcResult(res);
   };
@@ -468,27 +467,10 @@ const InvestmentCalculator = () => {
     return data;
   }, [you, other, years, marriagePlan, retirementPlan, crisis, otherUseCompound, useHistoricalReturns, historicalReturns, portfolio]);
 
-  // 몬테카를로 시뮬레이션 결과
-  const monteCarloData = useMemo(() => {
-    if (!portfolio.enabled || !portfolio.monteCarloEnabled) return null;
-    
-    const result = runMonteCarloSimulation(
-      you.initial,
-      you.monthly,
-      portfolio.allocations,
-      years,
-      you.monthlyGrowthRate,
-      500
-    );
-    
-    return result;
-  }, [you.initial, you.monthly, portfolio.allocations, portfolio.enabled, portfolio.monteCarloEnabled, years, you.monthlyGrowthRate]);
-
   // 몬테카를로 밴드가 포함된 차트 데이터
   // 포트폴리오 모드일 때는 플랜 몬테카를로(mcResult)만 사용 (포트폴리오 MC는 결혼/주택 미반영이라 타이밍 안 맞음)
   const chartDataWithMonteCarlo = useMemo(() => {
     const percentiles = mcResult?.percentilesByYear;
-    console.log('[MC Debug] percentiles:', percentiles, 'mcResult:', mcResult);
     if (!percentiles) return chartData;
 
     return chartData.map((d, i) => ({
@@ -506,7 +488,6 @@ const InvestmentCalculator = () => {
     const result = chartDataWithMonteCarlo.some((d) =>
       d.mc_p10 != null || d.mc_p25 != null || d.mc_p50 != null || d.mc_p75 != null || d.mc_p90 != null
     );
-    console.log('[MC Debug] hasMonteCarloBand:', result, 'chartDataWithMonteCarlo[0]:', chartDataWithMonteCarlo[0]);
     return result;
   }, [chartDataWithMonteCarlo]);
 
@@ -621,8 +602,22 @@ const InvestmentCalculator = () => {
 
   // 복사 기능
   const [copied, setCopied] = useState(false);
+  const [copyTimeoutId, setCopyTimeoutId] = useState(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutId) clearTimeout(copyTimeoutId);
+    };
+  }, [copyTimeoutId]);
 
   const copyResults = () => {
+    const fmtEokFromManwon = (value) => {
+      if (value == null) return '-';
+      const n = Number(value);
+      if (!Number.isFinite(n)) return '-';
+      return (n / 10000).toFixed(2);
+    };
+
     const initialMonthlyPayment = marriagePlan.buyHouse
       ? (() => {
           if (marriagePlan.repaymentType === 'increasing') {
@@ -641,56 +636,61 @@ const InvestmentCalculator = () => {
         })()
       : 0;
 
+    const netHouseEquity = Math.max(0, houseValueFinal - remainingLoanFinal);
+    const finalFinancialAssets = Math.max(0, finalYou - netHouseEquity);
+
     const marriageInfo = marriagePlan.enabled
       ? `
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-💒 결혼 계획
+💒 결혼 및 주택 계획
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 • 결혼 시점: ${marriagePlan.yearOfMarriage}년 후
+• 결혼 비용: ${(marriagePlan.weddingCost || 0).toLocaleString()}만원
 
 👫 배우자 정보
 • 이름: ${marriagePlan.spouse.name}
 • 세후 월급: ${marriagePlan.spouse.salary.toLocaleString()}만원
 • 월 생활비: ${marriagePlan.spouse.expense?.toLocaleString?.() || marriagePlan.spouse.expense}만원
-• 월 투자액: ${marriagePlan.spouse.monthly.toLocaleString()}만원
+• 월 투자액: ${marriagePlan.spouse.monthly.toLocaleString()}만원 (저축률 ${((marriagePlan.spouse.monthly / marriagePlan.spouse.salary) * 100).toFixed(1)}%)
 • 투자액 증가율: ${marriagePlan.spouse.monthlyGrowthRate}%/년
-• 연 수익률: ${marriagePlan.spouse.rate}% 
-• 저축률: ${((marriagePlan.spouse.monthly / marriagePlan.spouse.salary) * 100).toFixed(1)}%
+• 연 수익률: ${marriagePlan.spouse.rate}%
 • 은퇴 시점: ${marriagePlan.spouse.retireYear}년 후
-${marriagePlan.spouse.adjustments?.length ? `• 투자액 변경: ${marriagePlan.spouse.adjustments.map((a) => `${a.year}년→${a.monthly}만원`).join(', ')}` : ''}
+${marriagePlan.spouse.adjustments?.length ? `• 투자액 변경 스케줄: ${marriagePlan.spouse.adjustments.map((a) => `[${a.year}년차: ${a.monthly}만]`).join(', ')}` : ''}
+
 ${
   marriagePlan.buyHouse
-    ? `
-🏠 주택 구매 정보
+    ? `🏠 주택 구매 정보
 • 집 가격: ${marriagePlan.housePrice.toLocaleString()}만원 (${(marriagePlan.housePrice / 10000).toFixed(1)}억원)
+• 구매 시점: ${yearOfHousePurchase}년 후
 • 자기자본: ${marriagePlan.downPayment.toLocaleString()}만원
-• 대출금액: ${marriagePlan.loanAmount.toLocaleString()}만원 (${(marriagePlan.loanAmount / 10000).toFixed(1)}억원, LTV ${marriagePlan.housePrice > 0 ? ((marriagePlan.loanAmount / marriagePlan.housePrice) * 100).toFixed(1) : '0'}%)
-• 대출 금리: ${marriagePlan.loanRate}%
-• 대출 기간: ${marriagePlan.loanYears}년${marriagePlan.prepayEnabled ? ` (중도상환: 결혼 ${marriagePlan.prepayYear}년 후 일시상환)` : ''}
-• 상환방식: ${marriagePlan.repaymentType === 'equalPayment' ? '원리금균등' : marriagePlan.repaymentType === 'equalPrincipal' ? '원금균등' : '체증식'}
+• 대출금액: ${marriagePlan.loanAmount.toLocaleString()}만원 (LTV ${marriagePlan.housePrice > 0 ? ((marriagePlan.loanAmount / marriagePlan.housePrice) * 100).toFixed(1) : '0'}%)
+• 대출 조건: 금리 ${marriagePlan.loanRate}%, ${marriagePlan.loanYears}년 만기, ${
+        marriagePlan.repaymentType === 'equalPayment' ? '원리금균등' : marriagePlan.repaymentType === 'equalPrincipal' ? '원금균등' : '체증식'
+      } 상환
+${marriagePlan.prepayEnabled ? `• 중도상환: 결혼 ${marriagePlan.prepayYear}년 후 잔액 일시상환 설정됨` : ''}
 • 초기 월 상환액: ${initialMonthlyPayment.toFixed(0)}만원
 • 주택 가격 상승률: ${marriagePlan.houseAppreciationRate}%/년
-• 대출 완료: 집 구매 ${effectiveLoanYears}년 후 (투자 시작 ${loanCompletionYear}년 후)
-• 현재 집 가치: ${houseValueFinal.toFixed(2)}억
-• 대출 잔액: ${remainingLoanFinal.toFixed(2)}억`
-    : `
-• 주택 구매: X`
+• 대출 완료 예상: 구매 ${effectiveLoanYears}년 후 (투자 시작 ${loanCompletionYear}년 후)
+
+📊 ${years}년 후 부동산 가치
+• 집 가치: ${houseValueFinal.toFixed(2)}억원
+• 대출 잔액: ${remainingLoanFinal.toFixed(2)}억원
+• 순 자산(Equity): ${netHouseEquity.toFixed(2)}억원`
+    : `🏠 주택 구매: 없음 (전월세 유지 가정)`
 }
 
-💰 결혼 후 재무 현황
-• 결혼 후 월 순저축: ${marriagePlan.buyHouse ? Math.max(0, you.monthly + marriagePlan.spouse.monthly - initialMonthlyPayment).toFixed(0) : (you.monthly + marriagePlan.spouse.monthly)}만원
-  - 본인 투자: ${you.monthly}만원
-  - 배우자 투자: ${marriagePlan.spouse.monthly}만원
-${marriagePlan.buyHouse ? `  - 대출 상환: -${initialMonthlyPayment.toFixed(0)}만원` : ''}
+💰 결혼 후 현금 흐름
+• 합산 월 투자액: ${marriagePlan.buyHouse ? Math.max(0, you.monthly + marriagePlan.spouse.monthly - initialMonthlyPayment).toFixed(0) : (you.monthly + marriagePlan.spouse.monthly)}만원
+  (본인 ${you.monthly} + 배우자 ${marriagePlan.spouse.monthly} ${marriagePlan.buyHouse ? `- 대출상환 ${initialMonthlyPayment.toFixed(0)}` : ''})
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-💍 결혼 효과
+💍 결혼 효과 분석
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• 결혼 안했을 때: ${finalYouNoMarriage.toFixed(2)}억원
-• 결혼 했을 때: ${finalYou.toFixed(2)}억원
+• 독신 유지 시 자산: ${finalYouNoMarriage.toFixed(2)}억원
+• 결혼 시 총 자산: ${finalYou.toFixed(2)}억원
 • 차이: ${marriageDifference >= 0 ? '+' : ''}${marriageDifference.toFixed(2)}억원 (${marriageDifference >= 0 ? '+' : ''}${((marriageDifference / finalYouNoMarriage) * 100).toFixed(1)}%)
-• ${marriageDifference >= 0 ? '✨ 결혼으로 자산이 더 늘어납니다!' : '⚠️ 대출 부담으로 자산이 줄어듭니다.'}
+• 결과: ${marriageDifference >= 0 ? '✨ 결혼으로 자산 증대 효과 발생' : '⚠️ 결혼 및 주택 비용으로 자산 감소'}
 `
       : '';
 
@@ -698,25 +698,30 @@ ${marriagePlan.buyHouse ? `  - 대출 상환: -${initialMonthlyPayment.toFixed(0
       ? `
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🏖️ 은퇴 계획
+🏖️ 은퇴 계획 및 인출 전략
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⏰ 은퇴 시점
+⏰ 은퇴 타임라인
 • 본인 은퇴: ${you.retireYear}년 후
 ${marriagePlan.enabled ? `• 배우자 은퇴: ${marriagePlan.spouse.retireYear}년 후` : ''}
-• 실제 인출 시작: ${effectiveRetireYear}년 후 (둘 다 은퇴 후)
-• 은퇴 시 자산: ${retireYearAsset.toFixed(2)}억원
+• 완전 은퇴(소득 중단): ${effectiveRetireYear}년 후
+• 은퇴 시점 자산: ${retireYearAsset.toFixed(2)}억원
 
 💰 은퇴 후 생활비
-• 월 생활비 (현재 기준): ${retirementPlan.monthlyExpense}만원
-• 인플레이션: ${retirementPlan.inflationRate}%/년
-• ${effectiveRetireYear}년 후 생활비: ${(retirementPlan.monthlyExpense * Math.pow(1 + retirementPlan.inflationRate / 100, effectiveRetireYear)).toFixed(0)}만원
+• 현재 가치: 월 ${retirementPlan.monthlyExpense}만원
+• 물가 상승률: ${retirementPlan.inflationRate}%/년
+• ${effectiveRetireYear}년 후 필요 생활비: 월 ${(retirementPlan.monthlyExpense * Math.pow(1 + retirementPlan.inflationRate / 100, effectiveRetireYear)).toFixed(0)}만원
 
-📊 투자 전략
-• 전략: ${retirementPlan.useJEPQ ? `JEPQ ${retirementPlan.jepqRatio}% + VOO ${100 - retirementPlan.jepqRatio}%` : 'VOO 100% (4% 룰)'}
-${retirementPlan.useJEPQ ? `• JEPQ 배당률: ${retirementPlan.jepqDividendRate}%/년` : ''}
-• VOO 성장률: ${retirementPlan.vooGrowthRate}%/년
-${retirementPlan.useJEPQ ? `• JEPQ 성장률: 2%/년 (고정)` : ''}
-${jepqFinancialIndependenceYear !== null ? `\n💰 JEPQ 경제적 자유\n• ${jepqFinancialIndependenceYear}년 후부터 JEPQ 배당금만으로 생활비 충당 가능!\n• 이후 배우자는 조기 은퇴 가능` : ''}
+📊 자산 운용 전략
+• 전략: ${retirementPlan.useJEPQ ? `JEPQ 배당형 포트폴리오` : 'S&P500 4% 룰 인출'}
+${
+  retirementPlan.useJEPQ
+    ? `• 배분: JEPQ ${retirementPlan.jepqRatio}% / VOO ${100 - retirementPlan.jepqRatio}%
+• JEPQ 배당률: 연 ${retirementPlan.jepqDividendRate}% (월배당)
+• JEPQ 성장률 가정: 연 2%
+• VOO 성장률 가정: 연 ${retirementPlan.vooGrowthRate}% 
+${jepqFinancialIndependenceYear !== null ? `✓ ${jepqFinancialIndependenceYear}년 후 JEPQ 배당금만으로 생활비 충당 가능 (경제적 자유 달성)` : '⚠️ 시뮬레이션 기간 내 배당금만으로 생활비 충당 불가'}`
+    : `• VOO 성장률: 연 ${retirementPlan.vooGrowthRate}% 가정`
+}
 `
       : '';
     
@@ -724,12 +729,12 @@ ${jepqFinancialIndependenceYear !== null ? `\n💰 JEPQ 경제적 자유\n• ${
   ? `
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📦 포트폴리오 구성
+📦 포트폴리오 구성 (자산 배분)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• VOO ${portfolio.allocations.voo}% | SCHD ${portfolio.allocations.schd}% | BND ${portfolio.allocations.bond}% | CASH ${portfolio.allocations.cash}%
-• 기대 수익률(가중): ${portfolio.enabled ? getExpectedPortfolioReturn(portfolio.allocations).toFixed(1) : you.rate}%
-${portfolio.rebalanceEnabled ? `• 리밸런싱: ${portfolio.rebalanceFrequency}개월 주기` : '• 리밸런싱: 없음'}
-${portfolio.monteCarloEnabled ? '• 포트폴리오 MC: 사용' : '• 포트폴리오 MC: 사용 안 함'}
+• 배분 비율: VOO ${portfolio.allocations.voo}% | SCHD ${portfolio.allocations.schd}% | BND ${portfolio.allocations.bond}% | CASH ${portfolio.allocations.cash}%
+• 가중 평균 기대수익률: ${getExpectedPortfolioReturn(portfolio.allocations).toFixed(1)}%
+${portfolio.rebalanceEnabled ? `• 리밸런싱: 매 ${portfolio.rebalanceFrequency}개월 마다` : '• 리밸런싱: 없음 (Buy & Hold)'}
+${portfolio.monteCarloEnabled ? '• 몬테카를로 적용: 예 (포트폴리오 변동성 반영)' : '• 몬테카를로 적용: 아니오'}
 `
   : '';
 
@@ -737,14 +742,80 @@ ${portfolio.monteCarloEnabled ? '• 포트폴리오 MC: 사용' : '• 포트�
   ? `
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🎲 몬테카를로 (S&P 500 셔플)
+🎲 몬테카를로 시뮬레이션 상세 분석 (프로그램 동작 문서)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• 시뮬레이션: ${mcResult.iterations}회 (seed: ${mcResult.seed})
-• 5% (워스트): ${(mcResult.p5 / 10000).toFixed(2)}억
-• 50% (중앙값): ${(mcResult.median / 10000).toFixed(2)}억
-• 95% (베스트): ${(mcResult.p95 / 10000).toFixed(2)}억
-• 평균: ${(mcResult.mean / 10000).toFixed(2)}억
-• 파산 확률: ${(mcResult.belowZeroProbability * 100).toFixed(2)}%
+0️⃣ 핵심 결론(숫자 해석 요약)
+• 차트의 MC 밴드(p10~p90)는 '금융자산(집 가치 제외)' 분포입니다.
+• MC 요약(p5/p50/p95 등)은 '최종 순자산(집 포함, 대출 차감)' 분포도 함께 제공합니다.
+  → 즉, "MC는 집 제외"는 차트 밴드 기준이며, 최종 순자산 분포는 참고로 같이 나옵니다.
+
+1️⃣ 입력/단위/시간축 정의
+• 금액 단위(내부 계산): 만원
+• 리포트/차트 단위(표시): 억원 (= 만원 ÷ 10,000)
+• 시간축: 1년 = 12개월, 월 단위로 복리/인출/대출 상환을 반영
+• 수익률 입력: 연 % (예: 8 = 연 8%)
+• 월 수익률 환산(기하평균): monthlyRate = (1 + annualPct/100)^(1/12) - 1
+
+2️⃣ 난수/재현성(Seed)
+• PRNG: mulberry32
+• 시드: ${mcResult.seed}
+• 동일한 시드/입력값이면 동일한 MC 결과가 재현됩니다.
+
+3️⃣ 데이터(연수익률)와 샘플링 방식
+• 데이터 소스: S&P 500 역사적 연수익률 배열(또는 포트폴리오 모드에서는 가중합 연수익률 배열)
+• 샘플링: "복원추출(with replacement)" 방식
+  - 각 시뮬레이션(iteration)마다, 매년(year=0..${years - 1}) 연수익률을 무작위로 1개 선택
+  - 선택된 연수익률 시퀀스(길이 ${years})로 해당 인생 플랜을 0~${years}년까지 시뮬레이션
+
+4️⃣ 1회 시뮬레이션(1 path)에서 적용되는 이벤트/계산 순서
+※ 메인 차트와 동일한 월 단위 엔진을 사용하며(동일한 규칙), 단지 “매년 수익률이 랜덤”이라는 점만 다릅니다.
+
+연도 루프(각 year)에서:
+  A) 연초에 yearlyData[year]를 기록(차트 타이밍과 동기화)
+  B) 해당 연도의 연수익률을 월 수익률로 변환
+  C) 월 루프(12개월)에서 아래를 순서대로 적용
+
+월 루프(각 month)에서:
+  1) 결혼 활성화 여부 판단 및 배우자 초기자산 합류(결혼 시점)
+  2) 집 구매 시점이면 다운페이 차감(본인/배우자 자산 비율로 분배)
+  3) 집 구매 후에는 집값을 매월 상승률로 업데이트(단, MC 밴드에서는 집값을 별도 표시하지 않음)
+  4) 은퇴 여부 판단(본인/배우자 은퇴, JEPQ 경제적 자유 로직 포함)
+  5) 수익률 적용(복리/단리 토글에 따라 자산 증가 방식이 달라짐)
+  6) 월 투자액 추가(월급-생활비 기반, 투자액 변경 스케줄 반영)
+  7) 대출 상환/중도상환 반영(상환액만큼 투자 여력 감소 또는 잔액 일시 상환)
+  8) 은퇴 후에는 인플레이션 반영 생활비를 월 단위로 인출
+
+5️⃣ 퍼센타일/밴드 계산 방식(연도별 분포)
+• 각 연도 y(0..${years})에 대해, ${mcResult.iterations.toLocaleString()}개의 금융자산 값을 모아 정렬
+• p10/p25/p50/p75/p90 = 정렬된 배열에서 해당 분위수 위치 값을 선택
+• mean = 해당 연도 값의 산술 평균
+
+6️⃣ 결과(핵심 숫자)
+① 금융자산 기준(차트 MC 밴드와 동일, 집 제외)
+• p10: ${fmtEokFromManwon(mcResult.percentilesByYear?.p10?.[years])}억
+• p25: ${fmtEokFromManwon(mcResult.percentilesByYear?.p25?.[years])}억
+• p50: ${fmtEokFromManwon(mcResult.percentilesByYear?.p50?.[years])}억
+• p75: ${fmtEokFromManwon(mcResult.percentilesByYear?.p75?.[years])}억
+• p90: ${fmtEokFromManwon(mcResult.percentilesByYear?.p90?.[years])}억
+• mean: ${fmtEokFromManwon(mcResult.percentilesByYear?.mean?.[years])}억
+• 금융자산 0 미만 확률: ${(mcResult.belowZeroFinancialProbability * 100).toFixed(2)}%
+
+② 최종 순자산 기준(집 포함, 대출 차감)
+• p5: ${fmtEokFromManwon(mcResult.p5)}억
+• p10: ${fmtEokFromManwon(mcResult.p10)}억
+• p25: ${fmtEokFromManwon(mcResult.p25)}억
+• p50(중앙값): ${fmtEokFromManwon(mcResult.median)}억
+• p75: ${fmtEokFromManwon(mcResult.p75)}억
+• p90: ${fmtEokFromManwon(mcResult.p90)}억
+• p95: ${fmtEokFromManwon(mcResult.p95)}억
+• mean: ${fmtEokFromManwon(mcResult.mean)}억
+• 순자산 0 미만 확률: ${(mcResult.belowZeroProbability * 100).toFixed(2)}%
+
+7️⃣ 해석/한계(중요)
+• 이 MC는 "연도별 수익률이 서로 독립"이라는 단순 가정(복원추출)을 둡니다.
+  - 실제 시장의 연속 호황/연속 불황(자기상관)까지 완벽히 모사하진 않습니다.
+• 세금/수수료/거래비용/자산군별 상관관계는 단순화되어 있습니다.
+• 그럼에도 결혼/주택/대출/은퇴/인플레이션 같은 인생 이벤트의 현금흐름은 월 단위로 매우 정확히 반영합니다.
 `
   : '';
 
@@ -752,96 +823,90 @@ ${portfolio.monteCarloEnabled ? '• 포트폴리오 MC: 사용' : '• 포트�
       ? `
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚠️ 위기 시나리오 (대공황 가정)
+⚠️ 위기 시나리오 (Stress Test)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• 시작: ${crisis.startYear}년 후
-• 지속: ${crisis.duration}년
-• 연간 하락률: ${crisis.drawdownRate}%`
+• 가정: 대공황급 경제 위기 발생
+• 발생 시점: ${crisis.startYear}년 후
+• 지속 기간: ${crisis.duration}년 동안
+• 하락폭: 매년 -${crisis.drawdownRate}% 하락
+`
       : '';
 
     const text = `
-🎯 투자 비교 결과 (${years}년)
+📜 [주효 인생 시뮬레이터] 투자 분석 리포트
+생성일: ${new Date().toLocaleDateString()}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📊 ${you.name}
+👤 본인(${you.name}) 설정
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 • 세후 월급: ${you.salary.toLocaleString()}만원
 • 월 생활비: ${you.expense?.toLocaleString?.() || you.expense}만원
+• 월 투자 가능액: ${you.monthly.toLocaleString()}만원 (저축률 ${youSavingsRate}%)
 • 초기 자산: ${you.initial.toLocaleString()}만원
-• 월 투자액: ${you.monthly.toLocaleString()}만원
 • 투자액 증가율: ${you.monthlyGrowthRate}%/년
-• 연 수익률: ${you.rate}%
-• 저축률: ${youSavingsRate}%
-• 은퇴 시점: ${you.retireYear}년 후
-${you.adjustments?.length ? `• 투자액 변경: ${you.adjustments.map((a) => `${a.year}년→${a.monthly}만원`).join(', ')}` : ''}
-${marriageInfo}${retirementInfo}
-${crisisInfo}
-${portfolioInfo}
-${monteCarloInfo}
-${years}년 후:
-• 총 자산: ${finalYou.toFixed(2)}억원
-• 연 자산소득: ${youIncome.toFixed(0)}만원 (월 ${(youIncome / 12).toFixed(0)}만원)
+• 연평균 수익률 가정: ${you.rate}%
+• 은퇴 목표: ${you.retireYear}년 후
+${you.adjustments?.length ? `• 투자액 변경 스케줄: ${you.adjustments.map((a) => `[${a.year}년차: ${a.monthly}만]`).join(', ')}` : ''}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📊 ${other.name}
+👤 비교 대상(${other.name}) 설정
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 • 세후 월급: ${other.salary.toLocaleString()}만원
-• 월 생활비: ${other.expense?.toLocaleString?.() || other.expense}만원
-• 초기 자산: ${other.initial.toLocaleString()}만원
-• 월 투자액: ${other.monthly.toLocaleString()}만원
-• 투자액 증가율: ${other.monthlyGrowthRate}%/년
+• 투자 방식: ${otherUseCompound ? '복리 투자' : '단리 저축'}
+• 월 투자액: ${other.monthly.toLocaleString()}만원 (저축률 ${otherSavingsRate}%)
 • 연 수익률: ${other.rate}%
-• 저축률: ${otherSavingsRate}%
-${other.adjustments?.length ? `• 투자액 변경: ${other.adjustments.map((a) => `${a.year}년→${a.monthly}만원`).join(', ')}` : ''}
+${other.adjustments?.length ? `• 투자액 변경 스케줄: ${other.adjustments.map((a) => `[${a.year}년차: ${a.monthly}만]`).join(', ')}` : ''}
 
-${years}년 후:
-• 총 자산: ${finalOther.toFixed(2)}억원
-• 연 자산소득: ${otherIncome.toFixed(0)}만원 (월 ${(otherIncome / 12).toFixed(0)}만원)
+${marriageInfo}${retirementInfo}${crisisInfo}${portfolioInfo}${monteCarloInfo}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-💰 비교 결과
+🏁 최종 결과 요약 (${years}년 후)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• 자산 차이: ${difference >= 0 ? '+' : ''}${difference.toFixed(2)}억원 (${((finalYou / finalOther - 1) * 100).toFixed(1)}%)
-• 세후 월급 차이: ${you.salary > other.salary ? you.name : other.name}이 ${Math.abs(you.salary - other.salary).toLocaleString()}만원 더 높음
-• 월 투자액 차이: ${you.monthly > other.monthly ? you.name : other.name}이 ${Math.abs(you.monthly - other.monthly).toLocaleString()}만원 더 많이 투자
-• 수익률 차이: ${you.rate > other.rate ? you.name : other.name}이 ${Math.abs(you.rate - other.rate).toFixed(1)}%p 더 높음
-${crossoverYear !== null ? `• 추월 시점: ${crossoverYear}년 후 ${finalYou > finalOther ? you.name : other.name}이 역전` : ''}
+1️⃣ ${you.name}의 총 자산: ${finalYou.toFixed(2)}억원
+   L 금융 자산: ${finalFinancialAssets.toFixed(2)}억원
+   L 부동산 순자산: ${netHouseEquity.toFixed(2)}억원 (집값 ${houseValueFinal.toFixed(2)}억 - 대출 ${remainingLoanFinal.toFixed(2)}억)
+   • 월 자산 소득(4%룰): ${(finalYou * 10000 * 0.04 / 12).toFixed(0)}만원
+
+2️⃣ ${other.name}의 총 자산: ${finalOther.toFixed(2)}억원
+   • 월 자산 소득(4%룰): ${(finalOther * 10000 * 0.04 / 12).toFixed(0)}만원
+
+3️⃣ 결과 비교
+   • 차이: ${difference.toFixed(2)}억원 (${you.name}이 ${(finalYou / finalOther).toFixed(2)}배 더 많음)
+   ${crossoverYear !== null ? `• ${crossoverYear}년 후부터 ${you.name}의 자산이 ${other.name}을 추월 시작` : '• 시작부터 본인이 우위'}
+
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-💡 핵심 인사이트
+📅 연도별 상세 시뮬레이션
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• ${years}년 후 ${you.name}의 자산만으로도 월 ${(youIncome / 12).toFixed(0)}만원의 소득이 발생합니다.
-• 저축률: ${you.name} ${youSavingsRate}% vs ${other.name} ${otherSavingsRate}%
-• 수익률의 힘: ${you.rate}%와 ${other.rate}%의 ${years}년 복리 차이는 ${(finalYou / finalOther).toFixed(2)}배입니다.
-${marriagePlan.enabled ? `• 결혼 효과: ${marriageDifference >= 0 ? '+' : ''}${marriageDifference.toFixed(2)}억원 (${((finalYou / finalYouNoMarriage - 1) * 100).toFixed(1)}%)` : ''}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📈 연도별 자산 추이 (단위: 억원)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-연도 | ${you.name}${marriagePlan.enabled ? '(결혼)' : ''} ${marriagePlan.enabled ? `| ${you.name}(독신)` : ''} | ${other.name}
-${'─'.repeat(60)}
+연도  |  본인(억)  |  비교(억)  | MC p10(억) | MC p50(억) | MC p90(억) |  주요 이벤트
+--------------------------------------------------------------------------------
 ${chartDataWithMonteCarlo.map((data, idx) => {
-  if (idx % Math.max(1, Math.floor(years / 20)) !== 0 && idx !== years) return ''; // 최대 20개 데이터 포인트
-  const baseRow = `${data.year.toString().padEnd(4)} | ${data.you.toFixed(2).padStart(8)}${marriagePlan.enabled ? ` | ${data.youNoMarriage.toFixed(2).padStart(8)}` : ''}  | ${data.other.toFixed(2).padStart(8)}`;
-  if (data.mc_p50 != null) {
-    return `${baseRow}  | MC p50 ${data.mc_p50.toFixed(2)} / p10 ${data.mc_p10?.toFixed(2) ?? '-'} / p90 ${data.mc_p90?.toFixed(2) ?? '-'}`;
-  }
-  return baseRow;
-}).filter(Boolean).join('\n')}
+  const eventLabels = [];
+  if (marriagePlan.enabled && idx === marriagePlan.yearOfMarriage) eventLabels.push('결혼/집');
+  if (marriagePlan.enabled && marriagePlan.buyHouse && idx === loanCompletionYear) eventLabels.push('대출완료');
+  if (retirementPlan.enabled && idx === you.retireYear) eventLabels.push('은퇴');
+  if (crossoverYear === idx) eventLabels.push('역전');
 
-주요 시점:
-${marriagePlan.enabled ? `• ${marriagePlan.yearOfMarriage}년: 결혼` : ''}
-${marriagePlan.enabled && marriagePlan.buyHouse ? `• ${loanCompletionYear}년: 대출 완료` : ''}
-${retirementPlan.enabled ? `• ${you.retireYear}년: 본인 은퇴` : ''}
-${retirementPlan.enabled && marriagePlan.enabled ? `• ${marriagePlan.spouse.retireYear}년: 배우자 은퇴` : ''}
-${crossoverYear !== null ? `• ${crossoverYear}년: ${you.name} 역전` : ''}
-${jepqFinancialIndependenceYear !== null ? `• ${jepqFinancialIndependenceYear}년: JEPQ 경제적 자유` : ''}
-${marriagePlan.spouse.adjustments?.length ? `• 배우자 투자액 변경: ${marriagePlan.spouse.adjustments.map((a) => `${a.year}년→${a.monthly}만원`).join(', ')}` : ''}
+  const yearStr = `${data.year}년`.padEnd(5);
+  const youStr = data.you.toFixed(2).padStart(9);
+  const otherStr = data.other.toFixed(2).padStart(9);
+  const p10Str = data.mc_p10 != null ? data.mc_p10.toFixed(2).padStart(9) : '        -';
+  const p50Str = data.mc_p50 != null ? data.mc_p50.toFixed(2).padStart(9) : '        -';
+  const p90Str = data.mc_p90 != null ? data.mc_p90.toFixed(2).padStart(9) : '        -';
+  const eventStr = eventLabels.length > 0 ? `  <-- ${eventLabels.join(', ')}` : '';
+
+  return `${yearStr}|${youStr} |${otherStr} |${p10Str} |${p50Str} |${p90Str} |${eventStr}`;
+}).join('\n')}
+--------------------------------------------------------------------------------
+* MC(몬테카를로) 값은 부동산을 제외한 금융 자산만 표시됩니다.
+* 본인/비교 자산은 부동산 포함 총 자산입니다.
 `;
 
     navigator.clipboard.writeText(text).then(() => {
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      if (copyTimeoutId) clearTimeout(copyTimeoutId);
+      const id = setTimeout(() => setCopied(false), 2000);
+      setCopyTimeoutId(id);
     });
   };
 

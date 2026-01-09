@@ -119,12 +119,14 @@ export const runMonteCarloPlan = (person, years, marriage, retirement, annualRet
     iterations = 2000,
     seed = Date.now(),
     useCompound = true,
+    includeSamples = false,
   } = options;
 
   const rng = mulberry32(seed >>> 0);
   const results = [];
   const yearlyWealths = Array.from({ length: years + 1 }, () => []);
   let belowZero = 0;
+  let belowZeroFinancial = 0;
 
   for (let i = 0; i < iterations; i++) {
     const seq = [];
@@ -145,6 +147,8 @@ export const runMonteCarloPlan = (person, years, marriage, retirement, annualRet
     results.push(wealth);
 
     const path = wealthResult.yearlyData?.map((d) => d.wealth) || [];
+    const endFinancial = path[years] ?? wealth;
+    if (endFinancial < 0) belowZeroFinancial += 1;
     for (let y = 0; y <= years; y++) {
       yearlyWealths[y].push(path[y] ?? wealth);
     }
@@ -182,20 +186,30 @@ export const runMonteCarloPlan = (person, years, marriage, retirement, annualRet
     percentilesByYear.mean.push(arr.reduce((s, v) => s + v, 0) / arr.length);
   }
 
-  return {
+  const payload = {
     iterations,
     seed,
     years,
     p5: pick(0.05),
+    p10: pick(0.1),
+    p25: pick(0.25),
     median: pick(0.5),
+    p75: pick(0.75),
+    p90: pick(0.9),
     p95: pick(0.95),
     min: results[0],
     max: results[results.length - 1],
     mean,
     belowZeroProbability: results.length ? belowZero / results.length : 0,
-    samples: results,
+    belowZeroFinancialProbability: results.length ? belowZeroFinancial / results.length : 0,
     percentilesByYear,
   };
+
+  if (includeSamples) {
+    payload.samples = results;
+  }
+
+  return payload;
 };
 
 // 체증식(매월 납입액 증가) 스케줄 생성: 첫 달 이자 수준에서 시작해 월 성장률을 이진탐색으로 찾아 만기에 원금이 0이 되도록 함
@@ -300,15 +314,17 @@ export const getLoanPaymentAtMonth = (
   const monthlyRate = annualRate / 100 / 12;
 
   if (repaymentType === 'equalPayment') {
-    // 원리금균등
+    // 원리금균등 (O(1) 폐쇄형 해)
+    // 남은 원금 = P*(1+r)^m - PMT * (((1+r)^m - 1)/r)
+    // r=0인 경우는 단순 선형 상환
     const monthlyPayment = calculateMonthlyPaymentEqual(loanAmount, annualRate, loanYears);
-
-    // 남은 원금 계산
-    let remainingPrincipal = loanAmount;
-    for (let i = 0; i < monthsSinceLoanStart; i++) {
-      const interest = remainingPrincipal * monthlyRate;
-      const principal = monthlyPayment - interest;
-      remainingPrincipal -= principal;
+    const m = Math.max(0, Math.min(monthsSinceLoanStart, totalMonths));
+    let remainingPrincipal = 0;
+    if (monthlyRate === 0) {
+      remainingPrincipal = loanAmount - (loanAmount / totalMonths) * m;
+    } else {
+      const pow = Math.pow(1 + monthlyRate, m);
+      remainingPrincipal = loanAmount * pow - monthlyPayment * ((pow - 1) / monthlyRate);
     }
 
     return {
@@ -331,8 +347,17 @@ export const getLoanPaymentAtMonth = (
       isComplete: false,
     };
   } else {
-    // 체증식 (increasing) - 사전 계산된 스케줄 사용
-    const schedule = buildIncreasingSchedule(loanAmount, annualRate, loanYears);
+    // 체증식 (increasing) - 사전 계산된 스케줄 캐시 사용
+    const key = `${loanAmount}|${annualRate}|${loanYears}|increasing`;
+    if (!getLoanPaymentAtMonth.__increasingCache) {
+      getLoanPaymentAtMonth.__increasingCache = new Map();
+    }
+    const cache = getLoanPaymentAtMonth.__increasingCache;
+    let schedule = cache.get(key);
+    if (!schedule) {
+      schedule = buildIncreasingSchedule(loanAmount, annualRate, loanYears);
+      cache.set(key, schedule);
+    }
     const row = schedule[Math.min(monthsSinceLoanStart, schedule.length - 1)];
     const remainingPrincipal = row ? row.remainingPrincipal : 0;
     const payment = row ? row.payment : 0;

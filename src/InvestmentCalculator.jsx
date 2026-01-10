@@ -102,8 +102,11 @@ const InvestmentCalculator = () => {
   const [useRealAsset, setUseRealAsset] = useState(false);
   // 자산 차트에 주택 포함 여부
   const [useHouseInChart, setUseHouseInChart] = useState(true);
+  const [wealthChartHeight, setWealthChartHeight] = useState(480);
   // 몬테카를로 (과거 수익률 셔플)
   const [mcOptions, setMcOptions] = useState({ iterations: 2000, seed: 1234 });
+  const [mcAccumulateEnabled, setMcAccumulateEnabled] = useState(false);
+  const [mcAccumulateKey, setMcAccumulateKey] = useState('');
   const [mcResult, setMcResult] = useState(null);
   const [mcChartData, setMcChartData] = useState([]);
 
@@ -240,14 +243,51 @@ const InvestmentCalculator = () => {
     return Math.floor(Math.random() * 2 ** 32);
   };
 
+  const startWealthChartResize = (e) => {
+    e.preventDefault();
+    const startY = e.clientY;
+    const startHeight = wealthChartHeight;
+
+    const onMove = (ev) => {
+      const delta = ev.clientY - startY;
+      const next = Math.max(260, Math.min(900, startHeight + delta));
+      setWealthChartHeight(next);
+    };
+
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
+
   const handleRunMonteCarlo = () => {
-    const iter = Math.max(100, Math.min(mcOptions.iterations || 2000, 20000));
-    const seed = generateMonteCarloSeed();
+    const iterToAdd = Math.max(100, Math.min(mcOptions.iterations || 2000, 20000));
+
+    // 같은 설정에서만 누적 허용 (설정이 달라지면 자동으로 새로 시작)
+    const currentKey = JSON.stringify({ years, you, marriagePlan, retirementPlan });
+    const canAccumulate = Boolean(
+      mcAccumulateEnabled &&
+      mcResult &&
+      mcAccumulateKey &&
+      mcAccumulateKey === currentKey &&
+      Number.isFinite(mcResult.seed)
+    );
+
+    const seed = canAccumulate ? mcResult.seed : generateMonteCarloSeed();
+    const totalIterations = canAccumulate ? (mcResult.iterations || 0) + iterToAdd : iterToAdd;
+
+    if (!canAccumulate) {
+      setMcAccumulateKey(currentKey);
+    }
+
     setMcOptions((prev) => ({ ...prev, seed }));
     // calculateWealthWithMarriageHistorical 내부에서 /100 처리하므로 % 단위 그대로 전달
     const returns = SP500_RETURNS_ARRAY;
     const res = runMonteCarloPlan(you, years, marriagePlan, retirementPlan, returns, {
-      iterations: iter,
+      iterations: totalIterations,
       seed,
       useCompound: true,
       includeSamples: true,
@@ -1111,7 +1151,14 @@ ${chartDataWithMonteCarlo.map((data, idx) => {
               <h3 className="text-lg font-bold text-gray-800">🎲 몬테카를로 (S&P500 과거 수익률 셔플)</h3>
               <p className="text-sm text-gray-500">
                 {SP500_STATS.startYear}~{SP500_STATS.endYear} 연도별 수익률을 무작위 순서로 섞어 {years}년간 현재 시나리오(결혼/주택/은퇴 포함)를 {mcOptions.iterations}회 시뮬레이션합니다.
+                {mcAccumulateEnabled && mcResult ? ` (누적 총 ${mcResult.iterations}회)` : ''}
               </p>
+              <div className="mt-2 text-xs text-gray-600 leading-relaxed">
+                <div>• 샘플링: 매년 과거 수익률 목록에서 1개를 <b>복원추출</b>(with replacement)로 뽑아 {years}년 시퀀스를 만듭니다. (연도 간 독립 가정)</div>
+                <div>• 적용: 뽑힌 “연 수익률”을 월 단위로 환산해 복리로 반영하고, 결혼/주택(다운페이·대출상환·중도상환)·은퇴(인출) 같은 현금흐름 이벤트를 <b>월 단위</b>로 동일 엔진에 적용합니다.</div>
+                <div>• 결과: 최종 순자산(집 포함·대출 차감) 분포와, 연도별 분위수 밴드(p10/p25/p50/p75/p90)를 계산합니다. (차트 밴드는 설정에 따라 금융자산 기준으로 표시될 수 있음)</div>
+                <div>• Seed: 동일 시드/동일 입력이면 결과가 재현됩니다. “이전 결과에 누적”을 켜면 같은 시드로 반복 횟수를 늘려 기존 샘플을 보존한 채 더 많은 샘플을 추가합니다.</div>
+              </div>
             </div>
             <div className="flex flex-wrap items-end gap-3">
               <InputGroup
@@ -1132,6 +1179,15 @@ ${chartDataWithMonteCarlo.map((data, idx) => {
                 step={1}
                 unit=""
               />
+              <label className="flex items-center gap-2 mb-3 text-sm text-gray-700 select-none">
+                <input
+                  type="checkbox"
+                  checked={mcAccumulateEnabled}
+                  onChange={(e) => setMcAccumulateEnabled(e.target.checked)}
+                  className="h-4 w-4"
+                />
+                이전 결과에 누적
+              </label>
               <button
                 type="button"
                 onClick={handleRunMonteCarlo}
@@ -1556,26 +1612,36 @@ ${chartDataWithMonteCarlo.map((data, idx) => {
         )}
 
         {/* 차트 */}
-        <WealthChart
-          chartData={chartDataWithMonteCarlo}
-          you={you}
-          other={other}
-          marriagePlan={marriagePlan}
-          retirementPlan={retirementPlan}
-          personRetireYear={you.retireYear}
-          spouseRetireYear={marriagePlan.spouse.retireYear}
-          jepqFinancialIndependenceYear={jepqFinancialIndependenceYear}
-          crisis={crisis}
-          useLogScale={useLogScale}
-          onToggleLogScale={setUseLogScale}
-          useCompound={otherUseCompound}
-          useRealAsset={useRealAsset}
-          onToggleRealAsset={setUseRealAsset}
-          useHouseInChart={useHouseInChart}
-          onToggleHouseInChart={setUseHouseInChart}
-          inflationRate={retirementPlan.inflationRate}
-          monteCarloEnabled={hasMonteCarloBand}
-        />
+        <div className="mb-8">
+          <WealthChart
+            chartData={chartDataWithMonteCarlo}
+            you={you}
+            other={other}
+            marriagePlan={marriagePlan}
+            retirementPlan={retirementPlan}
+            personRetireYear={you.retireYear}
+            spouseRetireYear={marriagePlan.spouse.retireYear}
+            jepqFinancialIndependenceYear={jepqFinancialIndependenceYear}
+            crisis={crisis}
+            useLogScale={useLogScale}
+            onToggleLogScale={setUseLogScale}
+            useCompound={otherUseCompound}
+            useRealAsset={useRealAsset}
+            onToggleRealAsset={setUseRealAsset}
+            useHouseInChart={useHouseInChart}
+            onToggleHouseInChart={setUseHouseInChart}
+            inflationRate={retirementPlan.inflationRate}
+            monteCarloEnabled={hasMonteCarloBand}
+            height={wealthChartHeight}
+          />
+          <div
+            onPointerDown={startWealthChartResize}
+            className="mt-2 h-3 w-full cursor-row-resize rounded bg-gray-100 border border-gray-200"
+            title="드래그해서 차트 높이 조절"
+            role="separator"
+            aria-label="차트 높이 조절"
+          />
+        </div>
 
         {/* 인사이트 */}
         <InsightsSection

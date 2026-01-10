@@ -57,6 +57,7 @@ const WealthChart = ({
   useHouseInChart = true,
   onToggleHouseInChart,
   monteCarloEnabled = false,
+  height = 480,
 }) => {
   const effectiveRetireYear =
     marriagePlan.enabled && retirementPlan.enabled
@@ -192,7 +193,7 @@ const WealthChart = ({
           )}
         </div>
       </div>
-      <ResponsiveContainer width="100%" height={480}>
+      <ResponsiveContainer width="100%" height={height}>
         <ComposedChart data={sanitizedData} margin={{ top: 20, right: 30, left: 0, bottom: 10 }}>
           <defs>
             <linearGradient id="youGradient" x1="0" y1="0" x2="0" y2="1">

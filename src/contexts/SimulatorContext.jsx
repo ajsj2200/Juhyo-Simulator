@@ -105,6 +105,7 @@ export const SimulatorProvider = ({ children }) => {
   const [savedPresets, setSavedPresets] = useState([]);
   const [presetName, setPresetName] = useState('');
   const [previewPreset, setPreviewPreset] = useState(null);
+  const [activePresetId, setActivePresetId] = useState(null);
 
   // Active View (for navigation)
   const [activeView, setActiveView] = useState('dashboard');
@@ -768,8 +769,166 @@ export const SimulatorProvider = ({ children }) => {
     if (cloned.historicalStartYear !== undefined) {
       setHistoricalStartYear(cloned.historicalStartYear);
     }
+    setActivePresetId(preset.id);
     setPreviewPreset(null);
   }, []);
+
+  const handleUpdatePreset = useCallback(() => {
+    if (!activePresetId) return;
+    const next = savedPresets.map((p) => {
+      if (p.id === activePresetId) {
+        return {
+          ...p,
+          savedAt: new Date().toISOString(),
+          data: {
+            you,
+            other,
+            years,
+            marriagePlan,
+            retirementPlan,
+            crisis,
+            portfolio,
+            loanCalc,
+            otherUseCompound,
+            useLogScale,
+            useRealAsset,
+            useHouseInChart,
+            useHistoricalReturns,
+            historicalStartYear,
+          },
+        };
+      }
+      return p;
+    });
+    setSavedPresets(next);
+    persistLocalPresets(next);
+  }, [
+    activePresetId,
+    savedPresets,
+    you,
+    other,
+    years,
+    marriagePlan,
+    retirementPlan,
+    crisis,
+    portfolio,
+    loanCalc,
+    otherUseCompound,
+    useLogScale,
+    useRealAsset,
+    useHouseInChart,
+    useHistoricalReturns,
+    historicalStartYear,
+  ]);
+
+  const presetDiff = useMemo(() => {
+    if (!activePresetId) return [];
+    const active = savedPresets.find((p) => p.id === activePresetId);
+    if (!active || !active.data) return [];
+
+    const diffs = [];
+    const orig = active.data;
+
+    const addDiff = (field, oldVal, newVal, unit = '') => {
+      if (oldVal !== newVal) {
+        diffs.push({ field, old: oldVal, new: newVal, unit });
+      }
+    };
+
+    // 기간
+    addDiff('투자 기간', orig.years, years, '년');
+
+    // 나의 정보
+    addDiff('본인 월 투자액', orig.you.monthly, you.monthly, '만원');
+    addDiff('본인 수익률', orig.you.rate, you.rate, '%');
+    addDiff('본인 초기자산', orig.you.initial, you.initial, '만원');
+
+    // 상대방 정보
+    addDiff('상대방 월 투자액(기본)', orig.other.monthly, other.monthly, '만원');
+    addDiff('상대방 수익률(기본)', orig.other.rate, other.rate, '%');
+
+    // 결혼/주택
+    if (orig.marriagePlan.enabled !== marriagePlan.enabled) {
+      addDiff('결혼 계획 활성화', orig.marriagePlan.enabled ? 'O' : 'X', marriagePlan.enabled ? 'O' : 'X');
+    }
+    
+    // 배우자 정보 (결혼 계획)
+    addDiff('배우자 이름', orig.marriagePlan.spouse?.name, marriagePlan.spouse?.name, '');
+    addDiff('배우자 월급', orig.marriagePlan.spouse?.salary, marriagePlan.spouse?.salary, '만원');
+    addDiff('배우자 생활비', orig.marriagePlan.spouse?.expense, marriagePlan.spouse?.expense, '만원');
+    addDiff('배우자 월 투자액(결혼)', orig.marriagePlan.spouse?.monthly, marriagePlan.spouse?.monthly, '만원');
+    addDiff('배우자 투자액 증가율', orig.marriagePlan.spouse?.monthlyGrowthRate, marriagePlan.spouse?.monthlyGrowthRate, '%');
+    addDiff('배우자 수익률(결혼)', orig.marriagePlan.spouse?.rate, marriagePlan.spouse?.rate, '%');
+    addDiff('배우자 초기자산(결혼)', orig.marriagePlan.spouse?.initial, marriagePlan.spouse?.initial, '만원');
+
+    if (JSON.stringify(orig.marriagePlan.spouse?.adjustments) !== JSON.stringify(marriagePlan.spouse?.adjustments)) {
+      diffs.push({ field: '배우자 투자 변경 스케줄', old: '기존', new: '변경' });
+    }
+    
+    addDiff('집 가격', orig.marriagePlan.housePrice, marriagePlan.housePrice, '만원');
+    addDiff('대출 금액', orig.marriagePlan.loanAmount, marriagePlan.loanAmount, '만원');
+
+    // 포트폴리오 (기본)
+    Object.keys(ASSET_INFO).forEach(key => {
+      const name = ASSET_INFO[key].name;
+      if (portfolio.useAmountMode) {
+        addDiff(`${name} 투자금`, orig.portfolio.monthlyAmounts?.[key] || 0, portfolio.monthlyAmounts?.[key] || 0, '만원');
+      } else {
+        addDiff(`${name} 비중`, orig.portfolio.allocations?.[key] || 0, portfolio.allocations?.[key] || 0, '%');
+      }
+    });
+
+    // 커스텀 주식
+    const origCustoms = orig.portfolio.customStocks || [];
+    const currCustoms = portfolio.customStocks || [];
+    
+    // 추가되거나 변경된 종목
+    currCustoms.forEach(curr => {
+      const orig = origCustoms.find(o => o.ticker === curr.ticker);
+      if (!orig) {
+        diffs.push({ field: `${curr.ticker} 추가`, old: '-', new: portfolio.useAmountMode ? `${curr.monthlyAmount}만원` : `${curr.allocation}%` });
+      } else {
+        if (portfolio.useAmountMode) {
+          addDiff(`${curr.ticker} 투자금`, orig.monthlyAmount || 0, curr.monthlyAmount || 0, '만원');
+        } else {
+          addDiff(`${curr.ticker} 비중`, orig.allocation || 0, curr.allocation || 0, '%');
+        }
+        addDiff(`${curr.ticker} 수익률`, orig.expectedReturn || 0, curr.expectedReturn || 0, '%');
+      }
+    });
+
+    // 삭제된 종목
+    origCustoms.forEach(o => {
+      if (!currCustoms.find(c => c.ticker === o.ticker)) {
+        diffs.push({ field: `${o.ticker} 삭제`, old: '보유', new: '삭제' });
+      }
+    });
+    // 은퇴 계획
+    if (orig.retirementPlan.enabled !== retirementPlan.enabled) {
+      addDiff('은퇴 계산 활성화', orig.retirementPlan.enabled ? 'O' : 'X', retirementPlan.enabled ? 'O' : 'X');
+    }
+    addDiff('은퇴 후 생활비', orig.retirementPlan.monthlyExpense, retirementPlan.monthlyExpense, '만원');
+
+    // 위기 시나리오
+    if (orig.crisis.enabled !== crisis.enabled) {
+      addDiff('위기 시나리오 활성화', orig.crisis.enabled ? 'O' : 'X', crisis.enabled ? 'O' : 'X');
+    }
+    addDiff('위기 발생 시점', orig.crisis.startYear, crisis.startYear, '년차');
+
+    return diffs;
+  }, [
+    activePresetId,
+    savedPresets,
+    you,
+    other,
+    years,
+    marriagePlan,
+    retirementPlan,
+    crisis,
+    portfolio,
+    loanCalc,
+    useHistoricalReturns,
+  ]);
 
   const value = {
     // Core state
@@ -799,12 +958,10 @@ export const SimulatorProvider = ({ children }) => {
     setMcOptions,
     mcAccumulateEnabled,
     setMcAccumulateEnabled,
+    mcAccumulateKey,
+    setMcAccumulateKey,
     mcResult,
     mcChartData,
-    mcHistogramTotal,
-    runMonteCarlo,
-
-    // Portfolio Monte Carlo
     portfolioMcResult,
     portfolioMcChartData,
 
@@ -845,6 +1002,10 @@ export const SimulatorProvider = ({ children }) => {
     handleDeletePreset,
     handleConfirmLoadPreset,
     applyPreset,
+    handleUpdatePreset,
+    activePresetId,
+    setActivePresetId,
+    presetDiff,
 
     // Navigation
     activeView,

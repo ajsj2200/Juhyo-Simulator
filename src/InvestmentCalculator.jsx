@@ -29,7 +29,6 @@ import {
   DEFAULT_PORTFOLIO,
   getExpectedPortfolioReturn,
   getPortfolioStdDev,
-  runMonteCarloSimulation,
 } from './constants/assetData';
 import {
   calculateWealthWithMarriage,
@@ -47,6 +46,124 @@ import InputGroup from './components/InputGroup';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ComposedChart, Area } from 'recharts';
 
 const LOCAL_PRESET_KEY = 'vooAppCustomPresetsV1';
+
+const createRng = (seed = 1) => {
+  let a = seed >>> 0;
+  return () => {
+    a += 0x6d2b79f5;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+};
+
+const randomNormalWithRng = (rng) => {
+  let u = 0;
+  let v = 0;
+  while (u === 0) u = rng();
+  while (v === 0) v = rng();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+};
+
+const runPortfolioPlanMonteCarlo = (
+  person,
+  years,
+  marriage,
+  retirement,
+  allocations,
+  iterations,
+  seed
+) => {
+  const rng = createRng(seed || Math.floor(Math.random() * 2 ** 32));
+  const results = [];
+  const yearlyWealths = Array.from({ length: years + 1 }, () => []);
+  let belowZero = 0;
+  let belowZeroFinancial = 0;
+
+  const expected = getExpectedPortfolioReturn(allocations);
+  const stdDev = getPortfolioStdDev(allocations);
+
+  for (let i = 0; i < iterations; i++) {
+    const seq = [];
+    for (let y = 0; y < years; y++) {
+      const draw = expected + randomNormalWithRng(rng) * stdDev;
+      seq.push(draw);
+    }
+
+    const wealthResult = calculateWealthWithMarriageHistorical(
+      person,
+      years,
+      marriage,
+      retirement,
+      seq,
+      true
+    );
+    const wealth = wealthResult.wealth;
+    if (wealth < 0) belowZero += 1;
+    results.push(wealth);
+
+    const path = wealthResult.yearlyData?.map((d) => d.wealth) || [];
+    const endFinancial = path[years] ?? wealth;
+    if (endFinancial < 0) belowZeroFinancial += 1;
+
+    for (let y = 0; y <= years; y++) {
+      yearlyWealths[y].push(path[y] ?? wealth);
+    }
+  }
+
+  const pickFromSorted = (arr, p) => {
+    const idx = Math.max(0, Math.min(arr.length - 1, Math.floor(p * (arr.length - 1))));
+    return arr[idx];
+  };
+
+  const percentilesByYear = {
+    p10: [],
+    p25: [],
+    p50: [],
+    p75: [],
+    p90: [],
+    mean: [],
+  };
+
+  for (let y = 0; y <= years; y++) {
+    const arr = yearlyWealths[y];
+    arr.sort((a, b) => a - b);
+    percentilesByYear.p10.push(pickFromSorted(arr, 0.1));
+    percentilesByYear.p25.push(pickFromSorted(arr, 0.25));
+    percentilesByYear.p50.push(pickFromSorted(arr, 0.5));
+    percentilesByYear.p75.push(pickFromSorted(arr, 0.75));
+    percentilesByYear.p90.push(pickFromSorted(arr, 0.9));
+    percentilesByYear.mean.push(arr.reduce((s, v) => s + v, 0) / arr.length);
+  }
+
+  results.sort((a, b) => a - b);
+  const pick = (p) => {
+    const idx = Math.max(0, Math.min(results.length - 1, Math.floor(p * (results.length - 1))));
+    return results[idx];
+  };
+  const mean = results.reduce((s, v) => s + v, 0) / results.length;
+
+  return {
+    iterations,
+    seed,
+    years,
+    p5: pick(0.05),
+    p10: pick(0.1),
+    p25: pick(0.25),
+    median: pick(0.5),
+    p75: pick(0.75),
+    p90: pick(0.9),
+    p95: pick(0.95),
+    min: results[0],
+    max: results[results.length - 1],
+    mean,
+    belowZeroProbability: results.length ? belowZero / results.length : 0,
+    belowZeroFinancialProbability: results.length ? belowZeroFinancial / results.length : 0,
+    percentilesByYear,
+    expectedReturn: expected,
+    stdDev,
+  };
+};
 
 const loadLocalPresets = () => {
   if (typeof window === 'undefined') return [];
@@ -189,28 +306,29 @@ const InvestmentCalculator = () => {
   const portfolioMcResult = useMemo(() => {
     if (!portfolio.enabled || !portfolio.monteCarloEnabled) return null;
     const simulations = Math.max(100, Math.min(portfolio.monteCarloSimulations || 500, 20000));
-
-    return runMonteCarloSimulation(
-      you.initial,
-      you.monthly,
-      portfolio.allocations,
+    return runPortfolioPlanMonteCarlo(
+      you,
       years,
-      you.monthlyGrowthRate,
-      simulations
+      marriagePlan,
+      retirementPlan,
+      portfolio.allocations,
+      simulations,
+      mcOptions.seed
     );
   }, [
     portfolio.enabled,
     portfolio.monteCarloEnabled,
     portfolio.monteCarloSimulations,
     portfolio.allocations,
-    you.initial,
-    you.monthly,
-    you.monthlyGrowthRate,
+    marriagePlan,
+    retirementPlan,
+    you,
     years,
+    mcOptions.seed,
   ]);
 
   const portfolioMcChartData = useMemo(() => {
-    const percentiles = portfolioMcResult?.percentiles;
+    const percentiles = portfolioMcResult?.percentilesByYear;
     if (!percentiles) return [];
 
     const toEok = (v) => (v === null || v === undefined ? null : v / 10000);
@@ -1343,18 +1461,18 @@ ${chartDataWithMonteCarlo.map((data, idx) => {
 
         {/* 포트폴리오 변동성 몬테카를로 (자산 배분 전용) */}
         {portfolio.enabled && (
-          <div className="bg-white p-6 rounded-lg shadow mb-8 border border-purple-100">
+          <div className="bg-white p-6 rounded-lg shadow mb-8 border border-purple-100 w-full -mx-2 sm:-mx-4 md:-mx-6 lg:-mx-8">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-3">
               <div>
                 <h3 className="text-lg font-bold text-gray-800">🎯 포트폴리오 몬테카를로 (별도 차트)</h3>
                 <p className="text-sm text-gray-500">
-                  VOO/SCHD/BND/현금 비중과 변동성만 반영한 적립 시뮬레이션입니다. 결혼·주택·대출·은퇴 이벤트는 포함하지 않아 S&P500 기반 플랜 MC와 분리해 보여줍니다.
+                  VOO/SCHD/BND/현금 비중·변동성 기반 수익률을 연도별로 난수 생성해, 결혼·주택·대출·은퇴 이벤트까지 동일하게 반영한 몬테카를로입니다. (S&P500 기반 플랜 MC와 가정이 다르므로 별도 차트)
                 </p>
               </div>
               <div className="flex flex-wrap gap-2 text-xs text-gray-600">
                 <div className="px-3 py-2 bg-purple-50 border border-purple-100 rounded">
                   <div className="font-semibold text-purple-700">시뮬레이션</div>
-                  <div>{portfolioMcResult?.numSimulations || Math.max(100, Math.min(portfolio.monteCarloSimulations || 500, 20000))}회</div>
+                  <div>{portfolioMcResult?.iterations || Math.max(100, Math.min(portfolio.monteCarloSimulations || 500, 20000))}회</div>
                 </div>
                 <div className="px-3 py-2 bg-blue-50 border border-blue-100 rounded">
                   <div className="font-semibold text-blue-700">기대수익률</div>
@@ -1385,25 +1503,25 @@ ${chartDataWithMonteCarlo.map((data, idx) => {
                   <div className="p-3 rounded-lg bg-purple-50 border border-purple-100">
                     <div className="text-xs text-gray-600">p10 (보수적)</div>
                     <div className="text-lg font-bold text-purple-700">
-                      {formatEokFromManwon(portfolioMcResult.percentiles?.p10?.[years])}억
+                      {formatEokFromManwon(portfolioMcResult.percentilesByYear?.p10?.[years])}억
                     </div>
                   </div>
                   <div className="p-3 rounded-lg bg-gray-50 border border-gray-200">
                     <div className="text-xs text-gray-600">p50 (중앙값)</div>
                     <div className="text-lg font-bold text-gray-800">
-                      {formatEokFromManwon(portfolioMcResult.percentiles?.p50?.[years])}억
+                      {formatEokFromManwon(portfolioMcResult.percentilesByYear?.p50?.[years])}억
                     </div>
                   </div>
                   <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-100">
                     <div className="text-xs text-gray-600">p90 (낙관적)</div>
                     <div className="text-lg font-bold text-emerald-700">
-                      {formatEokFromManwon(portfolioMcResult.percentiles?.p90?.[years])}억
+                      {formatEokFromManwon(portfolioMcResult.percentilesByYear?.p90?.[years])}억
                     </div>
                   </div>
                   <div className="p-3 rounded-lg bg-orange-50 border border-orange-100">
                     <div className="text-xs text-gray-600">평균</div>
                     <div className="text-lg font-bold text-orange-700">
-                      {formatEokFromManwon(portfolioMcResult.percentiles?.mean?.[years])}억
+                      {formatEokFromManwon(portfolioMcResult.percentilesByYear?.mean?.[years])}억
                     </div>
                   </div>
                   <div className="p-3 rounded-lg bg-blue-50 border border-blue-100">
@@ -1414,7 +1532,7 @@ ${chartDataWithMonteCarlo.map((data, idx) => {
                   </div>
                 </div>
 
-                <div className="mt-4 h-72">
+                <div className="mt-5 h-96 w-full -mx-2 sm:-mx-4 md:-mx-6 lg:-mx-8">
                   <ResponsiveContainer width="100%" height="100%">
                     <ComposedChart data={portfolioMcChartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
                       <defs>

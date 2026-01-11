@@ -11,6 +11,10 @@ const PresetsView = () => {
     handleSavePreset,
     handleDeletePreset,
     handleConfirmLoadPreset,
+    handleUpdatePreset,
+    activePresetId,
+    setActivePresetId,
+    presetDiff,
   } = useSimulator();
 
   const formatSavedAt = (iso) => {
@@ -33,21 +37,104 @@ const PresetsView = () => {
         <p className="text-body">현재 설정을 저장하고 불러올 수 있습니다.</p>
       </div>
 
-      {/* Save New Preset */}
-      <Card variant="blue">
-        <h3 className="text-heading-3 mb-4">새 프리셋 저장</h3>
-        <div className="flex gap-3">
-          <input
-            type="text"
-            value={presetName}
-            onChange={(e) => setPresetName(e.target.value)}
-            placeholder="프리셋 이름 (예: 2035 결혼 플랜)"
-            className="input flex-1"
-          />
-          <button type="button" onClick={handleSavePreset} className="btn btn-primary whitespace-nowrap">
-            저장
-          </button>
+      {/* Save or Update Preset */}
+      <Card variant={activePresetId ? 'default' : 'blue'}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-heading-3">
+            {activePresetId ? '현재 프리셋 수정' : '새 프리셋 저장'}
+          </h3>
+          {activePresetId && (
+            <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-bold rounded-full">
+              편집 중
+            </span>
+          )}
         </div>
+
+        {activePresetId ? (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-200">
+              <div>
+                <div className="font-bold text-gray-800">
+                  {savedPresets.find((p) => p.id === activePresetId)?.name}
+                </div>
+                <div className="text-xs text-gray-500 mt-1">
+                  이 프리셋에 현재 변경사항을 덮어씁니다.
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleUpdatePreset();
+                    // 피드백을 위해 잠시후에 알림을 띄우거나 상태를 업데이트 할 수 있습니다.
+                  }}
+                  className="btn btn-primary"
+                  disabled={presetDiff.length === 0}
+                >
+                  기존 프리셋 업데이트
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActivePresetId(null);
+                    setPresetName('');
+                  }}
+                  className="btn btn-secondary"
+                >
+                  새로 만들기
+                </button>
+              </div>
+            </div>
+
+            {presetDiff.length > 0 ? (
+              <div className="overflow-hidden border border-gray-200 rounded-lg">
+                <table className="min-w-full divide-y divide-gray-200 text-xs">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-bold text-gray-500 uppercase tracking-wider">항목</th>
+                      <th className="px-3 py-2 text-left font-bold text-gray-500 uppercase tracking-wider">기존</th>
+                      <th className="px-3 py-2 text-left font-bold text-gray-500 uppercase tracking-wider">변경</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {presetDiff.map((diff, idx) => (
+                      <tr key={idx}>
+                        <td className="px-3 py-2 font-medium text-gray-700">{diff.field}</td>
+                        <td className="px-3 py-2 text-red-600 bg-red-50/50">
+                          <span className="line-through">{diff.old}{diff.unit}</span>
+                        </td>
+                        <td className="px-3 py-2 text-green-700 bg-green-50/50 font-bold">
+                          {typeof diff.new === 'number' ? `+${diff.new}` : diff.new}{diff.unit}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-center py-2 text-sm text-gray-500">
+                변경사항이 없습니다.
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex gap-3">
+            <input
+              type="text"
+              value={presetName}
+              onChange={(e) => setPresetName(e.target.value)}
+              placeholder="프리셋 이름 (예: 2035 결혼 플랜)"
+              className="input flex-1"
+            />
+            <button
+              type="button"
+              onClick={handleSavePreset}
+              className="btn btn-primary whitespace-nowrap"
+            >
+              저장
+            </button>
+          </div>
+        )}
       </Card>
 
       {/* Saved Presets */}

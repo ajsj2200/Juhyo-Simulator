@@ -5,7 +5,6 @@ import {
   ASSET_INFO,
   PORTFOLIO_PRESETS,
   getExpectedPortfolioReturn,
-  getPortfolioVolatilityLevel,
   getPortfolioStdDev,
 } from '../constants/assetData';
 
@@ -27,6 +26,19 @@ const PortfolioSection = ({ portfolio, setPortfolio }) => {
   const customStocksTotal = customStocks.reduce((sum, s) => sum + s.allocation, 0);
   // 기본 자산들이 차지할 수 있는 최대 비율
   const baseAssetsMax = 100 - customStocksTotal;
+  const baseWeight = Math.max(0, baseAssetsMax / 100);
+
+  // 기본 자산 비율을 전체 100% 기준으로 정규화 (기대수익률/표준편차 계산용)
+  const normalizedBaseAllocations = useMemo(() => {
+    const sum = Object.values(localAllocations).reduce((a, b) => a + b, 0);
+    if (sum === 0) return localAllocations;
+    const factor = 100 / sum;
+    const next = {};
+    Object.entries(localAllocations).forEach(([k, v]) => {
+      next[k] = Math.max(0, v * factor);
+    });
+    return next;
+  }, [localAllocations]);
 
   // 외부에서 portfolio가 변경되면 로컬 상태도 업데이트
   useEffect(() => {
@@ -144,39 +156,40 @@ const PortfolioSection = ({ portfolio, setPortfolio }) => {
     }
   };
 
-  // 기본 자산 예상 수익률 (비율 반영)
-  const baseExpectedReturn = getExpectedPortfolioReturn(localAllocations);
-  const baseStdDev = getPortfolioStdDev(localAllocations);
-  
+  // 기본 자산 예상 수익률/표준편차 (정규화된 비율로 계산)
+  const baseExpectedReturn = getExpectedPortfolioReturn(normalizedBaseAllocations);
+  const baseStdDev = getPortfolioStdDev(normalizedBaseAllocations);
+
   // 커스텀 주식 포함 전체 예상 수익률 계산
   const totalExpectedReturn = useMemo(() => {
-    // 기본 자산 기여분 (baseAssetsMax / 100 비율로 가중)
-    const baseContribution = baseExpectedReturn * (baseAssetsMax / 100);
-    
-    // 커스텀 주식 기여분
+    const baseContribution = baseExpectedReturn * baseWeight;
     const customContribution = customStocks.reduce((sum, stock) => {
-      return sum + (stock.expectedReturn || 0) * (stock.allocation / 100);
+      return sum + (stock.expectedReturn || 0) * ((stock.allocation || 0) / 100);
     }, 0);
-    
     return baseContribution + customContribution;
-  }, [baseExpectedReturn, baseAssetsMax, customStocks]);
+  }, [baseExpectedReturn, baseWeight, customStocks]);
 
-  // 커스텀 주식 포함 전체 표준편차 계산 (단순화: 가중 평균)
+  // 커스텀 주식 포함 전체 표준편차 계산 (단순화: 기본자산 블록 vs 커스텀 주식 상관계수 0.5 가정)
   const totalStdDev = useMemo(() => {
-    // 기본 자산 분산 기여분
-    const baseVarianceContribution = Math.pow(baseStdDev, 2) * Math.pow(baseAssetsMax / 100, 2);
-    
+    // 기본 자산 블록을 하나의 자산처럼 취급
+    const baseVariance = Math.pow(baseStdDev * baseWeight, 2);
+
     // 커스텀 주식 분산 기여분
     const customVarianceContribution = customStocks.reduce((sum, stock) => {
-      return sum + Math.pow(stock.stdDev || 0, 2) * Math.pow(stock.allocation / 100, 2);
+      const w = (stock.allocation || 0) / 100;
+      const sd = stock.stdDev || 0;
+      return sum + Math.pow(w * sd, 2);
     }, 0);
-    
-    // 상관관계는 0.5로 가정 (보수적 추정)
-    const correlationFactor = 2 * (baseAssetsMax / 100) * (customStocksTotal / 100) * baseStdDev * 
-      (customStocks.length > 0 ? (customStocks.reduce((sum, s) => sum + (s.stdDev || 0), 0) / customStocks.length) : 0) * 0.5;
-    
-    return Math.sqrt(baseVarianceContribution + customVarianceContribution + correlationFactor);
-  }, [baseStdDev, baseAssetsMax, customStocks, customStocksTotal]);
+
+    // 기본 자산 블록과 커스텀 주식 간 상관계수 0.5 가정
+    const crossVariance = customStocks.reduce((sum, stock) => {
+      const w = (stock.allocation || 0) / 100;
+      const sd = stock.stdDev || 0;
+      return sum + 2 * baseWeight * w * baseStdDev * sd * 0.5;
+    }, 0);
+
+    return Math.sqrt(Math.max(0, baseVariance + customVarianceContribution + crossVariance));
+  }, [baseStdDev, baseWeight, customStocks]);
 
   // 변동성 레벨 (커스텀 주식 포함)
   const totalVolatilityLevel = useMemo(() => {
@@ -690,9 +703,27 @@ const PortfolioSection = ({ portfolio, setPortfolio }) => {
               <span className="text-xs text-gray-500">(변동성 밴드 표시)</span>
             </div>
             {monteCarloEnabled && (
-              <div className="pl-7 text-xs text-purple-600 bg-purple-50 p-2 rounded">
-                500회 시뮬레이션으로 10%~90% 확률 범위를 표시합니다.
-              </div>
+              <>
+                <div className="pl-7 text-xs text-purple-600 bg-purple-50 p-2 rounded">
+                  500~20,000회 시뮬레이션으로 10~90% 확률 범위를 표시합니다.
+                </div>
+                <div className="pl-7 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <InputGroup
+                    label="시뮬레이션 횟수"
+                    value={portfolio.monteCarloSimulations}
+                    onChange={(v) =>
+                      setPortfolio({
+                        ...portfolio,
+                        monteCarloSimulations: Math.max(100, Math.min(v, 20000)),
+                      })
+                    }
+                    min={100}
+                    max={20000}
+                    step={100}
+                    unit="회"
+                  />
+                </div>
+              </>
             )}
           </div>
         </>

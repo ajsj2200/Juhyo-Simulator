@@ -2,7 +2,7 @@ import { useSimulator } from '../../contexts/SimulatorContext';
 import { MarriagePlanSection } from '../index';
 
 const MarriageView = () => {
-  const { marriagePlan, setMarriagePlan, you, years } = useSimulator();
+  const { marriagePlan, setMarriagePlan, you } = useSimulator();
 
   return (
     <div className="space-y-6 animate-fade-in">

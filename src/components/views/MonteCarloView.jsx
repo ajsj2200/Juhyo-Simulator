@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { useSimulator } from '../../contexts/SimulatorContext';
 import Card from '../ui/Card';
 import InputGroup from '../InputGroup';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+import Modal from '../ui/Modal';
 
 const MonteCarloView = () => {
   const {
@@ -15,7 +17,19 @@ const MonteCarloView = () => {
     mcHistogramTotal,
     runMonteCarlo,
     SP500_STATS,
+    useHistoricalReturns,
+    setUseHistoricalReturns,
   } = useSimulator();
+
+  const [exclusiveModalOpen, setExclusiveModalOpen] = useState(false);
+
+  const onClickRun = () => {
+    if (useHistoricalReturns) {
+      setExclusiveModalOpen(true);
+      return;
+    }
+    runMonteCarlo();
+  };
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -66,7 +80,7 @@ const MonteCarloView = () => {
               </label>
               <button
                 type="button"
-                onClick={runMonteCarlo}
+                onClick={onClickRun}
                 className="btn btn-primary"
               >
                 실행
@@ -154,6 +168,42 @@ const MonteCarloView = () => {
           )}
         </Card>
       )}
+
+      <Modal
+        open={exclusiveModalOpen}
+        title="몬테카를로 모드 선택"
+        description="히스토리컬 수익률 모드가 켜져 있어 S&P500 몬테카를로를 바로 실행할 수 없습니다. 하나만 선택해 주세요."
+        onClose={() => setExclusiveModalOpen(false)}
+      >
+        <div className="space-y-3">
+          <button
+            type="button"
+            className="w-full btn btn-primary"
+            onClick={() => {
+              setUseHistoricalReturns(false);
+              setExclusiveModalOpen(false);
+              // 모드 전환 후 실행
+              runMonteCarlo();
+            }}
+          >
+            S&P500 몬테카를로 실행
+          </button>
+          <button
+            type="button"
+            className="w-full btn btn-secondary"
+            onClick={() => setExclusiveModalOpen(false)}
+          >
+            히스토리컬 수익률 모드 유지
+          </button>
+          <button
+            type="button"
+            className="w-full btn"
+            onClick={() => setExclusiveModalOpen(false)}
+          >
+            취소
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 };

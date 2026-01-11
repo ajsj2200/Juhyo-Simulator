@@ -1,9 +1,65 @@
+import { useState } from 'react';
 import { useSimulator } from '../../contexts/SimulatorContext';
 import Card from '../ui/Card';
 import InputGroup from '../InputGroup';
+import Modal from '../ui/Modal';
+import { SP500_ANNUAL_RETURNS } from '../../constants/sp500History';
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ReferenceLine,
+  Cell,
+} from 'recharts';
 
 const CrisisView = () => {
-  const { crisis, setCrisis, useHistoricalReturns, setUseHistoricalReturns, historicalStartYear, setHistoricalStartYear, SP500_YEARS } = useSimulator();
+  const {
+    crisis,
+    setCrisis,
+    useHistoricalReturns,
+    setUseHistoricalReturns,
+    historicalStartYear,
+    setHistoricalStartYear,
+    SP500_YEARS,
+    mcResult,
+    clearSp500MonteCarlo,
+  } = useSimulator();
+
+  const [exclusiveModalOpen, setExclusiveModalOpen] = useState(false);
+
+  const onToggleHistorical = (next) => {
+    if (next && mcResult) {
+      setExclusiveModalOpen(true);
+      return;
+    }
+    setUseHistoricalReturns(next);
+  };
+
+  const maxYearsToShow = 100;
+  const yearsToShow = SP500_YEARS.slice(Math.max(0, SP500_YEARS.length - maxYearsToShow));
+
+  const sp500ChartData = yearsToShow.reduce((acc, year, idx) => {
+    const ret = Number(SP500_ANNUAL_RETURNS[year] ?? 0);
+    const prevLevel = idx === 0 ? 100 : Number(acc[acc.length - 1]?.level ?? 100);
+    const level = idx === 0 ? 100 : prevLevel * (1 + ret / 100);
+    return [...acc, { year, ret, level }];
+  }, []);
+
+  const formatIndexTick = (v) => {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return '';
+    if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
+    if (n >= 10000) return `${Math.round(n / 1000).toLocaleString('ko-KR')}k`;
+    return Math.round(n).toLocaleString('ko-KR');
+  };
+
+  const selectedReturn = SP500_ANNUAL_RETURNS[historicalStartYear];
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -23,7 +79,7 @@ const CrisisView = () => {
             <input
               type="checkbox"
               checked={useHistoricalReturns}
-              onChange={(e) => setUseHistoricalReturns(e.target.checked)}
+              onChange={(e) => onToggleHistorical(e.target.checked)}
               className="sr-only peer"
             />
             <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
@@ -40,18 +96,173 @@ const CrisisView = () => {
               onChange={(e) => setHistoricalStartYear(Number(e.target.value))}
               className="input"
             >
-              {SP500_YEARS.map((year) => (
+              {yearsToShow.map((year) => (
                 <option key={year} value={year}>
-                  {year}년
+                  {year}년 ({(SP500_ANNUAL_RETURNS[year] ?? 0).toFixed(2)}%)
                 </option>
               ))}
             </select>
             <p className="mt-2 text-xs text-gray-500">
               선택한 연도부터 실제 S&P500 수익률이 순차적으로 적용됩니다.
             </p>
+            <div className="mt-2 text-xs text-gray-600">
+              선택 연도 수익률: <span className="font-semibold">{(selectedReturn ?? 0).toFixed(2)}%</span>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-gray-200 bg-white/70 p-3">
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-sm font-semibold text-gray-800">
+                  최근 {yearsToShow.length}년 S&P500 차트 (최대 100년)
+                </div>
+                <div className="text-xs text-gray-500">선택 연도는 세로선으로 표시</div>
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                <div className="rounded-lg border border-gray-200 bg-white p-2">
+                  <div className="text-xs font-semibold text-gray-700 mb-1">
+                    S&P500 누적 지수 (시작=100)
+                  </div>
+                  <div className="h-44">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={sp500ChartData} margin={{ top: 8, right: 10, left: 0, bottom: 10 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis
+                          dataKey="year"
+                          type="number"
+                          domain={['dataMin', 'dataMax']}
+                          tick={{ fontSize: 10, fill: '#6b7280' }}
+                          tickLine={false}
+                          axisLine={{ stroke: '#e5e7eb' }}
+                          interval={9}
+                          tickFormatter={(v) => `${v}`}
+                        />
+                        <YAxis
+                          tick={{ fontSize: 10, fill: '#6b7280' }}
+                          tickLine={false}
+                          axisLine={{ stroke: '#e5e7eb' }}
+                          tickFormatter={formatIndexTick}
+                          width={48}
+                        />
+                        <ReferenceLine x={historicalStartYear} stroke="#16a34a" strokeDasharray="4 4" />
+                        <Tooltip
+                          formatter={(v, name) => {
+                            if (name === 'level') {
+                              return [formatIndexTick(v), '지수(시작=100)'];
+                            }
+                            if (name === 'ret') {
+                              return [`${Number(v).toFixed(2)}%`, '연 수익률'];
+                            }
+                            return [String(v), name];
+                          }}
+                          labelFormatter={(l) => `${l}년`}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="level"
+                          stroke="#2563eb"
+                          strokeWidth={2}
+                          dot={false}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-gray-200 bg-white p-2">
+                  <div className="text-xs font-semibold text-gray-700 mb-1">연도별 수익률 (Total Return)</div>
+                  <div className="h-44">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={sp500ChartData} margin={{ top: 8, right: 10, left: 0, bottom: 10 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis
+                          dataKey="year"
+                          type="number"
+                          domain={['dataMin', 'dataMax']}
+                          tick={{ fontSize: 10, fill: '#6b7280' }}
+                          tickLine={false}
+                          axisLine={{ stroke: '#e5e7eb' }}
+                          interval={9}
+                          tickFormatter={(v) => `${v}`}
+                        />
+                        <YAxis
+                          tick={{ fontSize: 10, fill: '#6b7280' }}
+                          tickLine={false}
+                          axisLine={{ stroke: '#e5e7eb' }}
+                          tickFormatter={(v) => `${v}%`}
+                          width={42}
+                        />
+                        <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="4 4" />
+                        <ReferenceLine x={historicalStartYear} stroke="#16a34a" strokeDasharray="4 4" />
+                        <Tooltip
+                          cursor={{ fill: 'rgba(99, 102, 241, 0.06)' }}
+                          formatter={(v) => [`${Number(v).toFixed(2)}%`, '수익률']}
+                          labelFormatter={(l) => `${l}년`}
+                        />
+                        <Bar dataKey="ret" radius={[4, 4, 0, 0]}>
+                          {sp500ChartData.map((row) => (
+                            <Cell
+                              key={row.year}
+                              fill={
+                                row.year === historicalStartYear
+                                  ? row.ret >= 0
+                                    ? '#16a34a'
+                                    : '#dc2626'
+                                  : row.ret >= 0
+                                  ? '#86efac'
+                                  : '#fca5a5'
+                              }
+                            />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+              <p className="mt-2 text-[11px] text-gray-500">
+                누적 지수는 해당 구간의 첫 해를 100으로 두고, 연 수익률을 누적 적용한 값입니다.
+              </p>
+            </div>
           </div>
         )}
       </Card>
+
+      <Modal
+        open={exclusiveModalOpen}
+        title="몬테카를로 모드 선택"
+        description="히스토리컬 수익률 모드와 S&P500 몬테카를로는 동시에 적용될 수 없습니다. 하나만 선택해 주세요."
+        onClose={() => setExclusiveModalOpen(false)}
+      >
+        <div className="space-y-3">
+          <button
+            type="button"
+            className="w-full btn btn-primary"
+            onClick={() => {
+              clearSp500MonteCarlo();
+              setUseHistoricalReturns(true);
+              setExclusiveModalOpen(false);
+            }}
+          >
+            히스토리컬 수익률 모드 사용
+          </button>
+          <button
+            type="button"
+            className="w-full btn btn-secondary"
+            onClick={() => {
+              setUseHistoricalReturns(false);
+              setExclusiveModalOpen(false);
+            }}
+          >
+            S&P500 몬테카를로 유지
+          </button>
+          <button
+            type="button"
+            className="w-full btn"
+            onClick={() => setExclusiveModalOpen(false)}
+          >
+            취소
+          </button>
+        </div>
+      </Modal>
 
       {/* Crisis Scenario */}
       <Card variant="amber">

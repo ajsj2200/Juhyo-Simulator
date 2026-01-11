@@ -905,9 +905,6 @@ export const calculateWealthWithMarriageHistorical = (
   // 메인 차트의 calculateWealthWithMarriage(you, y, ...)와 동일한 시점
   const yearlyData = [];
 
-  // 현재 집값과 대출잔액 추적용 변수 (yearlyData 저장용)
-  let currentHouseValueForData = marriage.buyHouse ? marriage.housePrice : 0;
-
   for (let year = 0; year <= targetYear; year++) {
     // year년 시점의 집값 포함 순자산 계산
     let wealthWithHouse = youWealth + spouseWealth;

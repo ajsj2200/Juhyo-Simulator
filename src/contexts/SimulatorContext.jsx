@@ -87,6 +87,7 @@ export const SimulatorProvider = ({ children }) => {
   const [useHouseInChart, setUseHouseInChart] = useState(true);
   const [wealthChartHeight, setWealthChartHeight] = useState(480);
   const [showMCBands, setShowMCBands] = useState(true);
+  const [portfolioMcChartHeight, setPortfolioMcChartHeight] = useState(240);
 
   // Historical Mode
   const [useHistoricalReturns, setUseHistoricalReturns] = useState(false);
@@ -660,6 +661,11 @@ export const SimulatorProvider = ({ children }) => {
     generateMonteCarloSeed,
   ]);
 
+  const clearSp500MonteCarlo = useCallback(() => {
+    setMcResult(null);
+    setMcAccumulateKey('');
+  }, []);
+
   const applyPreset = useCallback(
     (presetName) => {
       const preset = PRESETS[presetName];
@@ -962,6 +968,7 @@ export const SimulatorProvider = ({ children }) => {
     setMcAccumulateKey,
     mcResult,
     mcChartData,
+    mcHistogramTotal,
     portfolioMcResult,
     portfolioMcChartData,
 
@@ -978,6 +985,8 @@ export const SimulatorProvider = ({ children }) => {
     setWealthChartHeight,
     showMCBands,
     setShowMCBands,
+    portfolioMcChartHeight,
+    setPortfolioMcChartHeight,
 
     // Historical mode
     useHistoricalReturns,
@@ -1034,6 +1043,10 @@ export const SimulatorProvider = ({ children }) => {
     // Constants for reference
     SP500_STATS,
     SP500_YEARS,
+
+    // Actions
+    runMonteCarlo,
+    clearSp500MonteCarlo,
   };
 
   return <SimulatorContext.Provider value={value}>{children}</SimulatorContext.Provider>;

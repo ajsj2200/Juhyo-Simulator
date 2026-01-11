@@ -227,6 +227,8 @@ const InvestmentCalculator = () => {
   const [mcAccumulateKey, setMcAccumulateKey] = useState('');
   const [mcResult, setMcResult] = useState(null);
   const [mcChartData, setMcChartData] = useState([]);
+  const [mcError, setMcError] = useState('');
+  const [mcRunning, setMcRunning] = useState(false);
 
   const mcHistogramTotal = useMemo(() => mcChartData.reduce((sum, d) => sum + (d.count || 0), 0), [mcChartData]);
   const formatEokFromManwon = (value, fractionDigits = 2) => {
@@ -461,35 +463,45 @@ const InvestmentCalculator = () => {
   };
 
   const handleRunMonteCarlo = () => {
-    const iterToAdd = Math.max(100, Math.min(mcOptions.iterations || 2000, 20000));
+    setMcError('');
+    const iterInput = Number(mcOptions.iterations);
+    const iterToAdd = Math.max(100, Math.min(Number.isFinite(iterInput) ? iterInput : 2000, 20000));
 
-    // 같은 설정에서만 누적 허용 (설정이 달라지면 자동으로 새로 시작)
-    const currentKey = JSON.stringify({ years, you, marriagePlan, retirementPlan });
-    const canAccumulate = Boolean(
-      mcAccumulateEnabled &&
-      mcResult &&
-      mcAccumulateKey &&
-      mcAccumulateKey === currentKey &&
-      Number.isFinite(mcResult.seed)
-    );
+    try {
+      setMcRunning(true);
+      // 같은 설정에서만 누적 허용 (설정이 달라지면 자동으로 새로 시작)
+      const currentKey = JSON.stringify({ years, you, marriagePlan, retirementPlan });
+      const canAccumulate = Boolean(
+        mcAccumulateEnabled &&
+        mcResult &&
+        mcAccumulateKey &&
+        mcAccumulateKey === currentKey &&
+        Number.isFinite(mcResult.seed)
+      );
 
-    const seed = canAccumulate ? mcResult.seed : generateMonteCarloSeed();
-    const totalIterations = canAccumulate ? (mcResult.iterations || 0) + iterToAdd : iterToAdd;
+      const seed = canAccumulate ? mcResult.seed : generateMonteCarloSeed();
+      const totalIterations = canAccumulate ? (mcResult.iterations || 0) + iterToAdd : iterToAdd;
 
-    if (!canAccumulate) {
-      setMcAccumulateKey(currentKey);
+      if (!canAccumulate) {
+        setMcAccumulateKey(currentKey);
+      }
+
+      setMcOptions((prev) => ({ ...prev, seed }));
+      // calculateWealthWithMarriageHistorical 내부에서 /100 처리하므로 % 단위 그대로 전달
+      const returns = SP500_RETURNS_ARRAY;
+      const res = runMonteCarloPlan(you, years, marriagePlan, retirementPlan, returns, {
+        iterations: totalIterations,
+        seed,
+        useCompound: true,
+        includeSamples: true,
+      });
+      setMcResult(res);
+    } catch (e) {
+      console.error(e);
+      setMcError('몬테카를로 실행 중 오류가 발생했습니다. 입력값을 확인하세요.');
+    } finally {
+      setMcRunning(false);
     }
-
-    setMcOptions((prev) => ({ ...prev, seed }));
-    // calculateWealthWithMarriageHistorical 내부에서 /100 처리하므로 % 단위 그대로 전달
-    const returns = SP500_RETURNS_ARRAY;
-    const res = runMonteCarloPlan(you, years, marriagePlan, retirementPlan, returns, {
-      iterations: totalIterations,
-      seed,
-      useCompound: true,
-      includeSamples: true,
-    });
-    setMcResult(res);
   };
 
   // 프리셋 적용
@@ -1389,10 +1401,12 @@ ${chartDataWithMonteCarlo.map((data, idx) => {
                 type="button"
                 onClick={handleRunMonteCarlo}
                 className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700"
+                disabled={mcRunning}
               >
-                실행
+                {mcRunning ? '실행 중...' : '실행'}
               </button>
             </div>
+            {mcError && <div className="text-sm text-red-600 mt-2">{mcError}</div>}
           </div>
           {mcResult && (
             <>
@@ -1986,22 +2000,23 @@ ${chartDataWithMonteCarlo.map((data, idx) => {
             you={you}
             other={other}
             marriagePlan={marriagePlan}
-            retirementPlan={retirementPlan}
-            personRetireYear={you.retireYear}
-            spouseRetireYear={marriagePlan.spouse.retireYear}
-            jepqFinancialIndependenceYear={jepqFinancialIndependenceYear}
-            crisis={crisis}
-            useLogScale={useLogScale}
-            onToggleLogScale={setUseLogScale}
-            useCompound={otherUseCompound}
-            useRealAsset={useRealAsset}
-            onToggleRealAsset={setUseRealAsset}
-            useHouseInChart={useHouseInChart}
-            onToggleHouseInChart={setUseHouseInChart}
-            inflationRate={retirementPlan.inflationRate}
-            monteCarloEnabled={hasMonteCarloBand}
-            height={wealthChartHeight}
-          />
+          retirementPlan={retirementPlan}
+          personRetireYear={you.retireYear}
+          spouseRetireYear={marriagePlan.spouse.retireYear}
+          jepqFinancialIndependenceYear={jepqFinancialIndependenceYear}
+          crisis={crisis}
+          useLogScale={useLogScale}
+          onToggleLogScale={setUseLogScale}
+          useCompound={otherUseCompound}
+          useRealAsset={useRealAsset}
+          onToggleRealAsset={setUseRealAsset}
+          useHouseInChart={useHouseInChart}
+          onToggleHouseInChart={setUseHouseInChart}
+          inflationRate={retirementPlan.inflationRate}
+          monteCarloEnabled={hasMonteCarloBand}
+          height={wealthChartHeight}
+          showNoMarriageComparison={false}
+        />
           <div
             onPointerDown={startWealthChartResize}
             className="mt-2 h-3 w-full cursor-row-resize rounded bg-gray-100 border border-gray-200"

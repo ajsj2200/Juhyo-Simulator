@@ -36,6 +36,8 @@ const ResultsView = () => {
     portfolioMcChartData,
     portfolioStdDev,
     portfolioRate,
+    portfolioMcChartHeight,
+    setPortfolioMcChartHeight,
     // S&P500 Monte Carlo  
     mcResult,
   } = useSimulator();
@@ -49,6 +51,26 @@ const ResultsView = () => {
       const delta = ev.clientY - startY;
       const next = Math.max(260, Math.min(900, startHeight + delta));
       setWealthChartHeight(next);
+    };
+
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
+
+  const startPortfolioMcResize = (e) => {
+    e.preventDefault();
+    const startY = e.clientY;
+    const startHeight = portfolioMcChartHeight;
+
+    const onMove = (ev) => {
+      const delta = ev.clientY - startY;
+      const next = Math.max(180, Math.min(700, startHeight + delta));
+      setPortfolioMcChartHeight(next);
     };
 
     const onUp = () => {
@@ -181,6 +203,7 @@ const ResultsView = () => {
           loanCompletionYear={loanCompletionYear}
           monteCarloEnabled={hasMonteCarloBand && showMCBands}
           height={wealthChartHeight}
+          showNoMarriageComparison={false}
         />
 
         {/* Resize Handle */}
@@ -194,7 +217,7 @@ const ResultsView = () => {
 
       {/* Monte Carlo Comparison Section - Shows both MC results side by side */}
       {(mcResult || (portfolio?.enabled && portfolioMcResult)) && (
-        <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <section className="grid grid-cols-1 gap-6">
           {/* S&P500 Monte Carlo Results */}
           {mcResult && (
             <div className="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-xl p-5 border-2 border-indigo-200 shadow-sm">
@@ -289,7 +312,7 @@ const ResultsView = () => {
 
               {/* Portfolio MC Chart */}
               {portfolioMcChartData.length > 0 && (
-                <div className="h-48 bg-white/60 rounded-lg p-2">
+                <div className="bg-white/60 rounded-lg p-2" style={{ height: portfolioMcChartHeight }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <ComposedChart data={portfolioMcChartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                       <defs>
@@ -333,6 +356,15 @@ const ResultsView = () => {
                       <Line type="monotone" dataKey="p50" stroke="#7c3aed" strokeWidth={2.5} name="중앙값" dot={false} />
                     </ComposedChart>
                   </ResponsiveContainer>
+                </div>
+              )}
+
+              {portfolioMcChartData.length > 0 && (
+                <div
+                  onPointerDown={startPortfolioMcResize}
+                  className="h-3 w-full cursor-row-resize rounded bg-white/60 border border-purple-200 hover:bg-white/80 transition-colors mt-2 flex items-center justify-center"
+                >
+                  <div className="w-8 h-1 bg-purple-300 rounded" />
                 </div>
               )}
             </div>

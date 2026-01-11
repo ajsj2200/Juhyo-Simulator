@@ -31,7 +31,7 @@ const formatAxisTick = (value) => {
   return `${value.toFixed(2)}억`;
 };
 
-const CustomTooltip = ({ active, payload, label }) => {
+const CustomTooltip = ({ active, payload, label, showNoMarriageComparison = true }) => {
   if (!active || !payload?.length) return null;
 
   const byKey = (key) => payload.find((p) => p.dataKey === key);
@@ -42,7 +42,7 @@ const CustomTooltip = ({ active, payload, label }) => {
     return raw !== undefined ? raw : item.value;
   };
 
-  const keys = ['you', 'youNoMarriage', 'other', 'spouseWealth', 'house'];
+  const keys = ['you', showNoMarriageComparison ? 'youNoMarriage' : null, 'other', 'spouseWealth', 'house'].filter(Boolean);
   const rows = keys
     .map((key) => {
       const item = byKey(key);
@@ -103,7 +103,14 @@ const CustomTooltip = ({ active, payload, label }) => {
   );
 };
 
-const CustomLegend = ({ payload, chartData, marriagePlan, monteCarloEnabled, useHouseInChart }) => {
+const CustomLegend = ({
+  payload,
+  chartData,
+  marriagePlan,
+  monteCarloEnabled,
+  useHouseInChart,
+  showNoMarriageComparison = true,
+}) => {
   const lastDataPoint = chartData?.[chartData.length - 1];
   if (!lastDataPoint) return null;
 
@@ -116,6 +123,7 @@ const CustomLegend = ({ payload, chartData, marriagePlan, monteCarloEnabled, use
       {legendItems
         .filter((entry) => {
           if (!marriagePlan.enabled && entry.dataKey === 'youNoMarriage') return false;
+          if (!showNoMarriageComparison && entry.dataKey === 'youNoMarriage') return false;
           if (!marriagePlan.enabled && entry.dataKey === 'spouseWealth') return false;
           if (!(marriagePlan.enabled && marriagePlan.buyHouse && useHouseInChart) && entry.dataKey === 'house') return false;
           return true;
@@ -164,6 +172,7 @@ const WealthChart = ({
   onToggleHouseInChart,
   monteCarloEnabled = false,
   height = 480,
+  showNoMarriageComparison = true,
 }) => {
   const effectiveRetireYear =
     marriagePlan.enabled && retirementPlan.enabled
@@ -409,7 +418,7 @@ const WealthChart = ({
             tickFormatter={formatAxisTick}
             label={{ value: '자산 (억원)', angle: -90, position: 'insideLeft', fill: '#6b7280' }}
           />
-          <Tooltip content={<CustomTooltip />} />
+          <Tooltip content={<CustomTooltip showNoMarriageComparison={showNoMarriageComparison} />} />
           <Legend
             content={
               <CustomLegend
@@ -417,6 +426,7 @@ const WealthChart = ({
                 marriagePlan={marriagePlan}
                 monteCarloEnabled={monteCarloEnabled}
                 useHouseInChart={useHouseInChart}
+                showNoMarriageComparison={showNoMarriageComparison}
               />
             }
             wrapperStyle={{ paddingTop: 20 }}
@@ -638,7 +648,7 @@ const WealthChart = ({
             dot={{ r: 3, strokeWidth: 2, stroke: '#fff' }}
             activeDot={{ r: 6, stroke: '#fff', strokeWidth: 2 }}
           />
-          {marriagePlan.enabled && (
+          {marriagePlan.enabled && showNoMarriageComparison && (
             <Area
               type="monotone"
               dataKey="youNoMarriage"

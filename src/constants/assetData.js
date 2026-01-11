@@ -126,6 +126,13 @@ export const DEFAULT_PORTFOLIO = {
     bond: 0,
     cash: 0,
   },
+  monthlyAmounts: {
+    voo: 0,
+    schd: 0,
+    bond: 0,
+    cash: 0,
+  },
+  useAmountMode: false, // true: 금액 모드, false: 비율 모드
   rebalanceEnabled: true,
   rebalanceFrequency: 12, // 월 단위 (12 = 연 1회)
   monteCarloEnabled: false,

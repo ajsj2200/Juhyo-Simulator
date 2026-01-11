@@ -10,8 +10,17 @@ import {
 } from '../constants/assetData';
 
 const PortfolioSection = ({ portfolio, setPortfolio }) => {
-  const { allocations, rebalanceEnabled, rebalanceFrequency, monteCarloEnabled, customStocks = [] } = portfolio;
+  const { 
+    allocations, 
+    rebalanceEnabled, 
+    rebalanceFrequency, 
+    monteCarloEnabled, 
+    customStocks = [],
+    monthlyAmounts = { voo: 0, schd: 0, bond: 0, cash: 0 },
+    useAmountMode = false,
+  } = portfolio;
   const [localAllocations, setLocalAllocations] = useState(allocations);
+  const [localMonthlyAmounts, setLocalMonthlyAmounts] = useState(monthlyAmounts);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
 
   // 커스텀 주식 합계 계산
@@ -217,89 +226,202 @@ const PortfolioSection = ({ portfolio, setPortfolio }) => {
 
       {portfolio.enabled && (
         <>
-          {/* 프리셋 버튼 */}
-          <div className="mb-4">
-            <div className="text-sm font-semibold text-gray-700 mb-2">빠른 설정</div>
-            <div className="flex flex-wrap gap-2">
-              {Object.entries(PORTFOLIO_PRESETS).map(([key, preset]) => (
+          {/* 투자 방식 토글 */}
+          <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-semibold text-gray-700">투자 방식</div>
+              <div className="flex items-center gap-2 bg-white rounded-lg p-1 border border-gray-200">
                 <button
-                  key={key}
-                  onClick={() => applyPreset(key)}
-                  className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition"
-                  title={preset.description}
+                  onClick={() => setPortfolio({ ...portfolio, useAmountMode: false })}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${
+                    !useAmountMode 
+                      ? 'bg-blue-500 text-white' 
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
                 >
-                  {preset.name}
+                  비율 %
                 </button>
-              ))}
+                <button
+                  onClick={() => setPortfolio({ ...portfolio, useAmountMode: true })}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${
+                    useAmountMode 
+                      ? 'bg-blue-500 text-white' 
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  금액 만원
+                </button>
+              </div>
             </div>
+            {useAmountMode && (
+              <div className="text-xs text-gray-500 mt-2">
+                각 종목에 월별로 투자할 금액을 직접 입력하세요. 비율은 자동 계산됩니다.
+              </div>
+            )}
           </div>
 
-          {/* 자산 배분 슬라이더 */}
-          <div className="space-y-3 mb-4">
-            {Object.entries(ASSET_INFO).map(([key, info]) => (
-              <div key={key} className="flex items-center gap-3">
-                <div
-                  className="w-3 h-3 rounded-full"
-                  style={{ backgroundColor: info.color }}
-                />
-                <div className="w-16 text-sm font-medium text-gray-700">{info.name}</div>
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  value={localAllocations[key]}
-                  onChange={(e) => handleAllocationChange(key, parseInt(e.target.value))}
-                  className="flex-1 h-2 rounded-lg appearance-none cursor-pointer"
-                  style={{
-                    background: `linear-gradient(to right, ${info.color} 0%, ${info.color} ${localAllocations[key]}%, #e5e7eb ${localAllocations[key]}%, #e5e7eb 100%)`,
-                  }}
-                />
-                <div className="w-12 text-right text-sm font-bold" style={{ color: info.color }}>
-                  {localAllocations[key]}%
-                </div>
+          {/* 프리셋 버튼 */}
+          {!useAmountMode && (
+            <div className="mb-4">
+              <div className="text-sm font-semibold text-gray-700 mb-2">빠른 설정</div>
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(PORTFOLIO_PRESETS).map(([key, preset]) => (
+                  <button
+                    key={key}
+                    onClick={() => applyPreset(key)}
+                    className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition"
+                    title={preset.description}
+                  >
+                    {preset.name}
+                  </button>
+                ))}
               </div>
-            ))}
+            </div>
+          )}
 
-            {/* 커스텀 주식 슬라이더 */}
-            {customStocks.map((stock) => (
-              <div key={stock.ticker} className="flex items-center gap-3 bg-gradient-to-r from-purple-50 to-transparent p-2 -mx-2 rounded-lg">
-                <div
-                  className="w-3 h-3 rounded-full"
-                  style={{ backgroundColor: stock.color }}
-                />
-                <div className="w-16 text-sm font-medium text-gray-700 truncate" title={stock.name}>
-                  {stock.ticker}
+          {/* 자산 배분 */}
+          <div className="space-y-3 mb-4">
+            {Object.entries(ASSET_INFO).map(([key, info]) => {
+              // 금액 모드에서 비율 계산
+              const totalAmount = Object.values(localMonthlyAmounts).reduce((a, b) => a + b, 0) + 
+                customStocks.reduce((sum, s) => sum + (s.monthlyAmount || 0), 0);
+              const calculatedPercent = totalAmount > 0 
+                ? Math.round((localMonthlyAmounts[key] / totalAmount) * 100) 
+                : 0;
+
+              return (
+                <div key={key} className="flex items-center gap-3">
+                  <div
+                    className="w-3 h-3 rounded-full"
+                    style={{ backgroundColor: info.color }}
+                  />
+                  <div className="w-16 text-sm font-medium text-gray-700">{info.name}</div>
+                  
+                  {useAmountMode ? (
+                    // 금액 모드
+                    <>
+                      <input
+                        type="number"
+                        min={0}
+                        value={localMonthlyAmounts[key]}
+                        onChange={(e) => {
+                          const newAmount = Math.max(0, parseInt(e.target.value) || 0);
+                          const newAmounts = { ...localMonthlyAmounts, [key]: newAmount };
+                          setLocalMonthlyAmounts(newAmounts);
+                          setPortfolio({
+                            ...portfolio,
+                            monthlyAmounts: newAmounts,
+                          });
+                        }}
+                        className="w-24 px-3 py-1.5 text-sm border border-gray-300 rounded-lg text-right font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-500">만원</span>
+                      <div className="w-12 text-right text-xs text-gray-400">
+                        ({calculatedPercent}%)
+                      </div>
+                    </>
+                  ) : (
+                    // 비율 모드
+                    <>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        value={localAllocations[key]}
+                        onChange={(e) => handleAllocationChange(key, parseInt(e.target.value))}
+                        className="flex-1 h-2 rounded-lg appearance-none cursor-pointer"
+                        style={{
+                          background: `linear-gradient(to right, ${info.color} 0%, ${info.color} ${localAllocations[key]}%, #e5e7eb ${localAllocations[key]}%, #e5e7eb 100%)`,
+                        }}
+                      />
+                      <div className="w-12 text-right text-sm font-bold" style={{ color: info.color }}>
+                        {localAllocations[key]}%
+                      </div>
+                    </>
+                  )}
                 </div>
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  value={stock.allocation}
-                  onChange={(e) => handleCustomStockAllocationChange(stock.ticker, parseInt(e.target.value))}
-                  className="flex-1 h-2 rounded-lg appearance-none cursor-pointer"
-                  style={{
-                    background: `linear-gradient(to right, ${stock.color} 0%, ${stock.color} ${stock.allocation}%, #e5e7eb ${stock.allocation}%, #e5e7eb 100%)`,
-                  }}
-                />
-                <div className="w-12 text-right text-sm font-bold" style={{ color: stock.color }}>
-                  {stock.allocation}%
+              );
+            })}
+
+            {/* 커스텀 주식 */}
+            {customStocks.map((stock) => {
+              // 금액 모드에서 비율 계산
+              const totalAmount = Object.values(localMonthlyAmounts).reduce((a, b) => a + b, 0) + 
+                customStocks.reduce((sum, s) => sum + (s.monthlyAmount || 0), 0);
+              const calculatedPercent = totalAmount > 0 
+                ? Math.round(((stock.monthlyAmount || 0) / totalAmount) * 100) 
+                : 0;
+
+              return (
+                <div key={stock.ticker} className="flex items-center gap-3 bg-gradient-to-r from-purple-50 to-transparent p-2 -mx-2 rounded-lg">
+                  <div
+                    className="w-3 h-3 rounded-full"
+                    style={{ backgroundColor: stock.color }}
+                  />
+                  <div className="w-16 text-sm font-medium text-gray-700 truncate" title={stock.name}>
+                    {stock.ticker}
+                  </div>
+                  
+                  {useAmountMode ? (
+                    // 금액 모드
+                    <>
+                      <input
+                        type="number"
+                        min={0}
+                        value={stock.monthlyAmount || 0}
+                        onChange={(e) => {
+                          const newAmount = Math.max(0, parseInt(e.target.value) || 0);
+                          setPortfolio({
+                            ...portfolio,
+                            customStocks: customStocks.map((s) =>
+                              s.ticker === stock.ticker ? { ...s, monthlyAmount: newAmount } : s
+                            ),
+                          });
+                        }}
+                        className="w-24 px-3 py-1.5 text-sm border border-gray-300 rounded-lg text-right font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-500">만원</span>
+                      <div className="w-12 text-right text-xs text-gray-400">
+                        ({calculatedPercent}%)
+                      </div>
+                    </>
+                  ) : (
+                    // 비율 모드
+                    <>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        value={stock.allocation}
+                        onChange={(e) => handleCustomStockAllocationChange(stock.ticker, parseInt(e.target.value))}
+                        className="flex-1 h-2 rounded-lg appearance-none cursor-pointer"
+                        style={{
+                          background: `linear-gradient(to right, ${stock.color} 0%, ${stock.color} ${stock.allocation}%, #e5e7eb ${stock.allocation}%, #e5e7eb 100%)`,
+                        }}
+                      />
+                      <div className="w-12 text-right text-sm font-bold" style={{ color: stock.color }}>
+                        {stock.allocation}%
+                      </div>
+                    </>
+                  )}
+                  
+                  <button
+                    onClick={() => {
+                      setPortfolio({
+                        ...portfolio,
+                        customStocks: customStocks.filter((s) => s.ticker !== stock.ticker),
+                      });
+                    }}
+                    className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition"
+                    title="삭제"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
                 </div>
-                <button
-                  onClick={() => {
-                    setPortfolio({
-                      ...portfolio,
-                      customStocks: customStocks.filter((s) => s.ticker !== stock.ticker),
-                    });
-                  }}
-                  className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition"
-                  title="삭제"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-            ))}
+              );
+            })}
 
             {/* 종목 추가 버튼 */}
             <button
@@ -314,18 +436,30 @@ const PortfolioSection = ({ portfolio, setPortfolio }) => {
           </div>
 
           {/* 합계 표시 */}
-          <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg mb-4">
-            <span className="text-sm text-gray-600">합계</span>
-            <span
-              className={`text-lg font-bold ${
-                Object.values(localAllocations).reduce((a, b) => a + b, 0) + customStocks.reduce((sum, s) => sum + s.allocation, 0) === 100
-                  ? 'text-green-600'
-                  : 'text-red-600'
-              }`}
-            >
-              {Object.values(localAllocations).reduce((a, b) => a + b, 0) + customStocks.reduce((sum, s) => sum + s.allocation, 0)}%
-            </span>
-          </div>
+          {useAmountMode ? (
+            // 금액 모드 합계
+            <div className="flex justify-between items-center p-3 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg mb-4">
+              <span className="text-sm font-semibold text-gray-700">월 총 투자금액</span>
+              <span className="text-xl font-bold text-blue-600">
+                {Object.values(localMonthlyAmounts).reduce((a, b) => a + b, 0) + 
+                  customStocks.reduce((sum, s) => sum + (s.monthlyAmount || 0), 0)}만원
+              </span>
+            </div>
+          ) : (
+            // 비율 모드 합계
+            <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg mb-4">
+              <span className="text-sm text-gray-600">합계</span>
+              <span
+                className={`text-lg font-bold ${
+                  Object.values(localAllocations).reduce((a, b) => a + b, 0) + customStocks.reduce((sum, s) => sum + s.allocation, 0) === 100
+                    ? 'text-green-600'
+                    : 'text-red-600'
+                }`}
+              >
+                {Object.values(localAllocations).reduce((a, b) => a + b, 0) + customStocks.reduce((sum, s) => sum + s.allocation, 0)}%
+              </span>
+            </div>
+          )}
 
           {/* 예상 수익률 및 표준편차 */}
           <div className="grid grid-cols-3 gap-3 mb-4">
@@ -401,61 +535,107 @@ const PortfolioSection = ({ portfolio, setPortfolio }) => {
             ))}
           </div>
 
-          {/* 커스텀 주식 수익률/변동성 수정 */}
+          {/* 커스텀 주식 상세 설정 */}
           {customStocks.length > 0 && (
             <div className="pt-4 border-t border-gray-100 mb-4">
-              <div className="text-sm font-semibold text-gray-700 mb-3">📊 추가 종목 수익률 설정</div>
-              <div className="text-xs text-gray-500 mb-2">과거 수익률을 기반으로 자동 계산되었지만, 직접 수정할 수 있습니다.</div>
-              <div className="space-y-2">
+              <div className="text-sm font-semibold text-gray-700 mb-3">📊 추가 종목 상세 설정</div>
+              <div className="text-xs text-gray-500 mb-2">보유 금액, 수익률, 변동성을 설정하세요.</div>
+              <div className="space-y-3">
                 {customStocks.map((stock) => (
-                  <div key={stock.ticker} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                    <div
-                      className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-xs"
-                      style={{ backgroundColor: stock.color }}
-                    >
-                      {stock.ticker.slice(0, 2)}
+                  <div key={stock.ticker} className="p-3 bg-gray-50 rounded-lg">
+                    <div className="flex items-center gap-3 mb-2">
+                      <div
+                        className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-xs"
+                        style={{ backgroundColor: stock.color }}
+                      >
+                        {stock.ticker.slice(0, 2)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-gray-900 text-sm">{stock.ticker}</div>
+                        <div className="text-xs text-gray-500 truncate">{stock.name}</div>
+                      </div>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-gray-900 text-sm">{stock.ticker}</div>
-                      <div className="text-xs text-gray-500 truncate">{stock.name}</div>
+                    
+                    {/* 보유금액 & 월 투자금액 */}
+                    <div className="grid grid-cols-2 gap-3 mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="text-xs text-gray-500 w-16">현재 보유</div>
+                        <input
+                          type="number"
+                          value={stock.initialAmount ?? 0}
+                          onChange={(e) => {
+                            const newAmount = Math.max(0, parseInt(e.target.value) || 0);
+                            setPortfolio({
+                              ...portfolio,
+                              customStocks: customStocks.map((s) =>
+                                s.ticker === stock.ticker ? { ...s, initialAmount: newAmount } : s
+                              ),
+                            });
+                          }}
+                          className="w-20 px-2 py-1 text-sm border border-gray-300 rounded text-right font-medium"
+                        />
+                        <span className="text-xs text-gray-500">만원</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="text-xs text-gray-500 w-16">월 투자</div>
+                        <input
+                          type="number"
+                          value={stock.monthlyAmount ?? 0}
+                          onChange={(e) => {
+                            const newAmount = Math.max(0, parseInt(e.target.value) || 0);
+                            setPortfolio({
+                              ...portfolio,
+                              customStocks: customStocks.map((s) =>
+                                s.ticker === stock.ticker ? { ...s, monthlyAmount: newAmount } : s
+                              ),
+                            });
+                          }}
+                          className="w-20 px-2 py-1 text-sm border border-gray-300 rounded text-right font-medium"
+                        />
+                        <span className="text-xs text-gray-500">만원</span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className="text-xs text-gray-500">수익률</div>
-                      <input
-                        type="number"
-                        value={stock.expectedReturn ?? 0}
-                        onChange={(e) => {
-                          const newReturn = parseFloat(e.target.value) || 0;
-                          setPortfolio({
-                            ...portfolio,
-                            customStocks: customStocks.map((s) =>
-                              s.ticker === stock.ticker ? { ...s, expectedReturn: newReturn } : s
-                            ),
-                          });
-                        }}
-                        className="w-16 px-2 py-1 text-sm border border-gray-300 rounded text-center font-medium"
-                        step="0.1"
-                      />
-                      <span className="text-xs text-gray-500">%</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="text-xs text-gray-500">변동성</div>
-                      <input
-                        type="number"
-                        value={stock.stdDev ?? 0}
-                        onChange={(e) => {
-                          const newStdDev = parseFloat(e.target.value) || 0;
-                          setPortfolio({
-                            ...portfolio,
-                            customStocks: customStocks.map((s) =>
-                              s.ticker === stock.ticker ? { ...s, stdDev: newStdDev } : s
-                            ),
-                          });
-                        }}
-                        className="w-16 px-2 py-1 text-sm border border-gray-300 rounded text-center font-medium"
-                        step="0.1"
-                      />
-                      <span className="text-xs text-gray-500">%</span>
+                    
+                    {/* 수익률 & 변동성 */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="flex items-center gap-2">
+                        <div className="text-xs text-gray-500 w-16">수익률</div>
+                        <input
+                          type="number"
+                          value={stock.expectedReturn ?? 0}
+                          onChange={(e) => {
+                            const newReturn = parseFloat(e.target.value) || 0;
+                            setPortfolio({
+                              ...portfolio,
+                              customStocks: customStocks.map((s) =>
+                                s.ticker === stock.ticker ? { ...s, expectedReturn: newReturn } : s
+                              ),
+                            });
+                          }}
+                          className="w-20 px-2 py-1 text-sm border border-gray-300 rounded text-right font-medium"
+                          step="0.1"
+                        />
+                        <span className="text-xs text-gray-500">%</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="text-xs text-gray-500 w-16">변동성</div>
+                        <input
+                          type="number"
+                          value={stock.stdDev ?? 0}
+                          onChange={(e) => {
+                            const newStdDev = parseFloat(e.target.value) || 0;
+                            setPortfolio({
+                              ...portfolio,
+                              customStocks: customStocks.map((s) =>
+                                s.ticker === stock.ticker ? { ...s, stdDev: newStdDev } : s
+                              ),
+                            });
+                          }}
+                          className="w-20 px-2 py-1 text-sm border border-gray-300 rounded text-right font-medium"
+                          step="0.1"
+                        />
+                        <span className="text-xs text-gray-500">%</span>
+                      </div>
                     </div>
                   </div>
                 ))}

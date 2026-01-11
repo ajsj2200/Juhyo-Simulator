@@ -14,8 +14,7 @@ const MarriageView = () => {
       <MarriagePlanSection
         marriagePlan={marriagePlan}
         setMarriagePlan={setMarriagePlan}
-        you={you}
-        years={years}
+        personMonthly={you.monthly}
       />
     </div>
   );

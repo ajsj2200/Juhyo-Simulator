@@ -18,6 +18,7 @@ import {
   BND_ANNUAL_RETURNS,
   CASH_ANNUAL_RETURN,
   DEFAULT_PORTFOLIO,
+  ASSET_INFO,
   getExpectedPortfolioReturn,
   getPortfolioStdDev,
   runMonteCarloSimulation,
@@ -177,24 +178,44 @@ export const SimulatorProvider = ({ children }) => {
   const portfolioRate = useMemo(() => {
     if (!portfolio.enabled) return you.rate;
     
-    // 기본 자산 예상 수익률
-    const baseReturn = getExpectedPortfolioReturn(portfolio.allocations);
-    const baseTotal = Object.values(portfolio.allocations).reduce((a, b) => a + b, 0);
-    
-    // 커스텀 주식 합계
     const customStocks = portfolio.customStocks || [];
-    const customTotal = customStocks.reduce((sum, s) => sum + s.allocation, 0);
+    const useAmountMode = portfolio.useAmountMode || false;
+    const monthlyAmounts = portfolio.monthlyAmounts || { voo: 0, schd: 0, bond: 0, cash: 0 };
     
-    // 기본 자산 기여분
-    const baseContribution = baseReturn * (baseTotal / 100);
-    
-    // 커스텀 주식 기여분
-    const customContribution = customStocks.reduce((sum, stock) => {
-      return sum + (stock.expectedReturn || 0) * (stock.allocation / 100);
-    }, 0);
-    
-    return baseContribution + customContribution;
-  }, [portfolio.enabled, portfolio.allocations, portfolio.customStocks, you.rate]);
+    if (useAmountMode) {
+      // 금액 모드: 각 자산의 금액 비중으로 수익률 계산
+      const baseAmountTotal = Object.values(monthlyAmounts).reduce((a, b) => a + b, 0);
+      const customAmountTotal = customStocks.reduce((sum, s) => sum + (s.monthlyAmount || 0), 0);
+      const totalAmount = baseAmountTotal + customAmountTotal;
+      
+      if (totalAmount === 0) return you.rate;
+      
+      // 기본 자산 기여분
+      let weightedReturn = 0;
+      Object.entries(monthlyAmounts).forEach(([key, amount]) => {
+        const assetReturn = ASSET_INFO[key]?.expectedReturn || 0;
+        weightedReturn += assetReturn * (amount / totalAmount);
+      });
+      
+      // 커스텀 주식 기여분
+      customStocks.forEach((stock) => {
+        weightedReturn += (stock.expectedReturn || 0) * ((stock.monthlyAmount || 0) / totalAmount);
+      });
+      
+      return weightedReturn;
+    } else {
+      // 비율 모드
+      const baseReturn = getExpectedPortfolioReturn(portfolio.allocations);
+      const baseTotal = Object.values(portfolio.allocations).reduce((a, b) => a + b, 0);
+      
+      const baseContribution = baseReturn * (baseTotal / 100);
+      const customContribution = customStocks.reduce((sum, stock) => {
+        return sum + (stock.expectedReturn || 0) * (stock.allocation / 100);
+      }, 0);
+      
+      return baseContribution + customContribution;
+    }
+  }, [portfolio.enabled, portfolio.allocations, portfolio.customStocks, portfolio.useAmountMode, portfolio.monthlyAmounts, you.rate]);
 
   // Portfolio standard deviation (including custom stocks)
   const portfolioStdDev = useMemo(() => {
@@ -675,10 +696,14 @@ export const SimulatorProvider = ({ children }) => {
         marriagePlan,
         retirementPlan,
         crisis,
+        portfolio, // 포트폴리오 전체 (커스텀 주식 포함)
+        loanCalc, // 대출 계산기 설정
         otherUseCompound,
         useLogScale,
         useRealAsset,
         useHouseInChart,
+        useHistoricalReturns,
+        historicalStartYear,
       },
     };
     const next = [payload, ...savedPresets];
@@ -695,10 +720,14 @@ export const SimulatorProvider = ({ children }) => {
     marriagePlan,
     retirementPlan,
     crisis,
+    portfolio,
+    loanCalc,
     otherUseCompound,
     useLogScale,
     useRealAsset,
     useHouseInChart,
+    useHistoricalReturns,
+    historicalStartYear,
   ]);
 
   const handleDeletePreset = useCallback(
@@ -720,10 +749,25 @@ export const SimulatorProvider = ({ children }) => {
     setMarriagePlan(cloned.marriagePlan);
     setRetirementPlan(cloned.retirementPlan);
     setCrisis(cloned.crisis);
+    // 포트폴리오 로드 (기존 프리셋 호환성 유지)
+    if (cloned.portfolio) {
+      setPortfolio(cloned.portfolio);
+    }
+    // 대출 계산기 로드
+    if (cloned.loanCalc) {
+      setLoanCalc(cloned.loanCalc);
+    }
     setOtherUseCompound(cloned.otherUseCompound ?? true);
     setUseLogScale(cloned.useLogScale ?? true);
     setUseRealAsset(cloned.useRealAsset ?? false);
     setUseHouseInChart(cloned.useHouseInChart ?? true);
+    // 히스토리컬 모드 로드
+    if (cloned.useHistoricalReturns !== undefined) {
+      setUseHistoricalReturns(cloned.useHistoricalReturns);
+    }
+    if (cloned.historicalStartYear !== undefined) {
+      setHistoricalStartYear(cloned.historicalStartYear);
+    }
     setPreviewPreset(null);
   }, []);
 

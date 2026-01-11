@@ -6,7 +6,9 @@
       "Bash(ping:*)",
       "Bash(npm install:*)",
       "Bash(cat:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(curl:*)",
+      "Bash(lsof:*)"
     ]
   }
 }

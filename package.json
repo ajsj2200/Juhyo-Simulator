@@ -7,6 +7,7 @@
     "dev": "vite",
     "dev:electron": "concurrently \"npm run dev\" \"npm run electron:start\"",
     "electron:start": "wait-on http://localhost:5173 && VITE_DEV_SERVER_URL=http://localhost:5173 NODE_ENV=development electron .",
+    "build:app": "node scripts/build-app.mjs",
     "build:win": "npm run build && electron-builder -w portable",
     "build:mac": "npm run build && electron-builder -m",
     "build": "vite build",

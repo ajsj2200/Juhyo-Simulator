@@ -3,16 +3,32 @@ import InputGroup from './InputGroup';
 const RetirementPlanSection = ({
   retirementPlan,
   setRetirementPlan,
+  // 구 버전 호환
   personRetireYear,
   spouseRetireYear,
   marriageEnabled,
   years,
   retireYearAsset,
+  // 신 버전 컨텍스트용
+  you,
+  marriagePlan,
 }) => {
+  const personYear = Number.isFinite(personRetireYear)
+    ? personRetireYear
+    : Number(you?.retireYear ?? 0);
+  const spouseYear = Number.isFinite(spouseRetireYear)
+    ? spouseRetireYear
+    : Number(marriagePlan?.spouse?.retireYear ?? 0);
+  const isMarriageEnabled =
+    typeof marriageEnabled === 'boolean'
+      ? marriageEnabled
+      : Boolean(marriagePlan?.enabled);
+  const retireAssetSafe = Number.isFinite(retireYearAsset) ? retireYearAsset : 0;
+
   // 실제 은퇴 시점 (둘 중 늦은 시점)
-  const effectiveRetireYear = marriageEnabled
-    ? Math.max(personRetireYear, spouseRetireYear)
-    : personRetireYear;
+  const effectiveRetireYear = isMarriageEnabled
+    ? Math.max(personYear, spouseYear)
+    : personYear;
 
   return (
     <div className="bg-gradient-to-r from-green-50 to-teal-50 p-6 rounded-lg shadow mb-8 border-2 border-green-200">
@@ -39,15 +55,15 @@ const RetirementPlanSection = ({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
               <div className="p-3 bg-blue-50 rounded">
                 <div className="text-gray-600">본인 은퇴</div>
-                <div className="text-xl font-bold text-blue-600">{personRetireYear}년 후</div>
+                <div className="text-xl font-bold text-blue-600">{personYear}년 후</div>
                 <div className="text-xs text-gray-500">
                   (PersonCard에서 설정)
                 </div>
               </div>
-              {marriageEnabled && (
+              {isMarriageEnabled && (
                 <div className="p-3 bg-purple-50 rounded">
                   <div className="text-gray-600">배우자 은퇴</div>
-                  <div className="text-xl font-bold text-purple-600">{spouseRetireYear}년 후</div>
+                  <div className="text-xl font-bold text-purple-600">{spouseYear}년 후</div>
                   <div className="text-xs text-gray-500">
                     (결혼 계획에서 설정)
                   </div>
@@ -170,9 +186,9 @@ const RetirementPlanSection = ({
         </>
       )}
 
-      {retirementPlan.enabled && (
-        <div className="mt-4 p-4 bg-white rounded-lg">
-          <h4 className="font-semibold text-gray-700 mb-2">📊 은퇴 계획 요약</h4>
+          {retirementPlan.enabled && (
+            <div className="mt-4 p-4 bg-white rounded-lg">
+              <h4 className="font-semibold text-gray-700 mb-2">📊 은퇴 계획 요약</h4>
 
           {effectiveRetireYear > years ? (
             <div className="text-sm text-orange-600 p-3 bg-orange-50 rounded">
@@ -184,7 +200,7 @@ const RetirementPlanSection = ({
             <div className="text-sm text-gray-600 space-y-2">
               <p>
                 • {effectiveRetireYear}년 후 은퇴 시 자산:
-                <strong className="text-green-600 ml-2">{retireYearAsset.toFixed(2)}억원</strong>
+                <strong className="text-green-600 ml-2">{retireAssetSafe.toFixed(2)}억원</strong>
               </p>
 
               {retirementPlan.useJEPQ ? (
@@ -197,13 +213,13 @@ const RetirementPlanSection = ({
                   <p>
                     • JEPQ 자산 ({retirementPlan.jepqRatio}%):
                     <strong className="ml-2">
-                      {((retireYearAsset * retirementPlan.jepqRatio) / 100).toFixed(2)}억원
+                      {((retireAssetSafe * retirementPlan.jepqRatio) / 100).toFixed(2)}억원
                     </strong>
                   </p>
                   <p className="ml-4 text-xs">
                     → 월 배당 (세전):{' '}
                     {(
-                      ((((retireYearAsset * retirementPlan.jepqRatio) / 100) * 10000 * retirementPlan.jepqDividendRate) / 100) /
+                      ((((retireAssetSafe * retirementPlan.jepqRatio) / 100) * 10000 * retirementPlan.jepqDividendRate) / 100) /
                       12
                     ).toFixed(0)}
                     만원
@@ -211,7 +227,7 @@ const RetirementPlanSection = ({
                   <p className="ml-4 text-xs">
                     → 월 배당 (세후 84.6%):{' '}
                     {(
-                      (((((retireYearAsset * retirementPlan.jepqRatio) / 100) * 10000 * retirementPlan.jepqDividendRate) / 100) / 12) *
+                      (((((retireAssetSafe * retirementPlan.jepqRatio) / 100) * 10000 * retirementPlan.jepqDividendRate) / 100) / 12) *
                       0.846
                     ).toFixed(0)}
                     만원
@@ -219,7 +235,7 @@ const RetirementPlanSection = ({
                   <p>
                     • VOO 자산 ({100 - retirementPlan.jepqRatio}%):
                     <strong className="ml-2">
-                      {((retireYearAsset * (100 - retirementPlan.jepqRatio)) / 100).toFixed(2)}억원
+                      {((retireAssetSafe * (100 - retirementPlan.jepqRatio)) / 100).toFixed(2)}억원
                     </strong>
                   </p>
                   <p className="ml-4 text-xs text-gray-500">
@@ -241,7 +257,7 @@ const RetirementPlanSection = ({
                       </strong>
                     </p>
                     <p className="font-semibold mt-2">
-                      {(((((retireYearAsset * retirementPlan.jepqRatio) / 100) * 10000 * retirementPlan.jepqDividendRate) / 100 / 12) * 0.846) >=
+                      {(((((retireAssetSafe * retirementPlan.jepqRatio) / 100) * 10000 * retirementPlan.jepqDividendRate) / 100 / 12) * 0.846) >=
                       retirementPlan.monthlyExpense * Math.pow(1 + retirementPlan.inflationRate / 100, effectiveRetireYear)
                         ? '✅ JEPQ 배당만으로 생활비 충당 가능!'
                         : '⚠️ JEPQ 배당 부족, VOO 일부 매도 필요'}
@@ -253,13 +269,13 @@ const RetirementPlanSection = ({
                   <p>
                     • 연간 인출 가능액 (4% 룰):
                     <strong className="text-green-600 ml-2">
-                      {(retireYearAsset * 10000 * 0.04).toFixed(0)}만원
+                      {(retireAssetSafe * 10000 * 0.04).toFixed(0)}만원
                     </strong>
                   </p>
                   <p>
                     • 월 사용 가능액:
                     <strong className="text-green-600 ml-2">
-                      {((retireYearAsset * 10000 * 0.04) / 12).toFixed(0)}만원
+                      {((retireAssetSafe * 10000 * 0.04) / 12).toFixed(0)}만원
                     </strong>
                   </p>
                   <p>
@@ -278,7 +294,7 @@ const RetirementPlanSection = ({
                   </p>
                   <div className="pt-2 border-t mt-2">
                     <p className="font-semibold">
-                      {(retireYearAsset * 10000 * 0.04) / 12 >=
+                      {(retireAssetSafe * 10000 * 0.04) / 12 >=
                       retirementPlan.monthlyExpense * Math.pow(1 + retirementPlan.inflationRate / 100, effectiveRetireYear)
                         ? '✅ 은퇴 가능! (4% 룰로 생활비 충당)'
                         : '⚠️ 은퇴 자산 부족 (더 저축하거나 은퇴 시점 연기 필요)'}

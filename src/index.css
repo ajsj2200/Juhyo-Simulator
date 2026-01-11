@@ -1,1 +1,279 @@
 @import "tailwindcss";
+
+/* Custom CSS Variables / Design Tokens */
+:root {
+  /* Primary Colors */
+  --color-primary: #2563eb;
+  --color-primary-light: #3b82f6;
+  --color-primary-dark: #1d4ed8;
+
+  /* Secondary Colors */
+  --color-secondary: #dc2626;
+  --color-secondary-light: #ef4444;
+
+  /* Accent Colors */
+  --color-marriage: #ec4899;
+  --color-retirement: #10b981;
+  --color-portfolio: #8b5cf6;
+  --color-crisis: #f59e0b;
+
+  /* Neutral */
+  --color-text: #1f2937;
+  --color-text-muted: #6b7280;
+  --color-border: #e5e7eb;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+
+  /* Spacing */
+  --spacing-xs: 0.25rem;
+  --spacing-sm: 0.5rem;
+  --spacing-md: 1rem;
+  --spacing-lg: 1.5rem;
+  --spacing-xl: 2rem;
+
+  /* Border Radius */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.5rem;
+
+  /* Sidebar */
+  --sidebar-width: 16rem;
+  --header-height: 4rem;
+}
+
+/* Base Typography */
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Card Styles */
+.card {
+  @apply bg-white/90 backdrop-blur-sm rounded-xl border border-gray-100 shadow-sm;
+}
+
+.card-hover {
+  @apply hover:shadow-md hover:border-gray-200 transition-all duration-200;
+}
+
+.card-section {
+  @apply bg-white rounded-xl border border-gray-100 shadow-sm p-6;
+}
+
+/* Section Color Variants */
+.section-blue {
+  @apply bg-gradient-to-br from-blue-50 to-blue-100/50 border-2 border-blue-200;
+}
+
+.section-pink {
+  @apply bg-gradient-to-br from-pink-50 to-purple-50 border-2 border-pink-200;
+}
+
+.section-green {
+  @apply bg-gradient-to-br from-green-50 to-teal-50 border-2 border-green-200;
+}
+
+.section-purple {
+  @apply bg-gradient-to-br from-purple-50 to-indigo-50 border-2 border-purple-200;
+}
+
+.section-amber {
+  @apply bg-gradient-to-br from-amber-50 to-orange-50 border-2 border-amber-200;
+}
+
+/* Button Styles */
+.btn {
+  @apply px-4 py-2 rounded-lg font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2;
+}
+
+.btn-primary {
+  @apply bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-500;
+}
+
+.btn-secondary {
+  @apply bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-200 focus:ring-gray-400;
+}
+
+.btn-ghost {
+  @apply text-gray-600 hover:bg-gray-100 focus:ring-gray-400;
+}
+
+.btn-danger {
+  @apply text-red-600 hover:bg-red-50 border border-red-200 focus:ring-red-400;
+}
+
+/* Input Styles */
+.input {
+  @apply w-full px-3 py-2 border border-gray-300 rounded-lg
+         focus:ring-2 focus:ring-blue-500 focus:border-transparent
+         transition-shadow duration-150;
+}
+
+.input-sm {
+  @apply px-2 py-1.5 text-sm;
+}
+
+/* Typography */
+.text-display {
+  @apply text-3xl md:text-4xl font-bold tracking-tight text-gray-900;
+}
+
+.text-heading-1 {
+  @apply text-2xl font-bold text-gray-800;
+}
+
+.text-heading-2 {
+  @apply text-xl font-semibold text-gray-800;
+}
+
+.text-heading-3 {
+  @apply text-lg font-semibold text-gray-700;
+}
+
+.text-body {
+  @apply text-base text-gray-600;
+}
+
+.text-caption {
+  @apply text-sm text-gray-500;
+}
+
+.text-stat {
+  @apply text-2xl md:text-3xl font-extrabold tabular-nums;
+}
+
+/* Navigation */
+.nav-item {
+  @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-600
+         hover:bg-gray-100 hover:text-gray-900 transition-colors duration-150;
+}
+
+.nav-item-active {
+  @apply bg-blue-50 text-blue-700 font-medium;
+}
+
+.nav-item-icon {
+  @apply w-5 h-5 flex-shrink-0;
+}
+
+/* Sidebar */
+.sidebar {
+  @apply fixed left-0 top-0 h-screen w-64 bg-white/80 backdrop-blur-lg
+         border-r border-gray-200 overflow-y-auto z-40;
+}
+
+.sidebar-header {
+  @apply h-16 flex items-center px-4 border-b border-gray-100;
+}
+
+.sidebar-content {
+  @apply p-4;
+}
+
+/* Mobile Bottom Navigation */
+.mobile-nav {
+  @apply fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-lg
+         border-t border-gray-200 z-50;
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.mobile-nav-item {
+  @apply flex flex-col items-center justify-center py-2 px-3
+         text-gray-500 hover:text-blue-600 transition-colors;
+}
+
+.mobile-nav-item-active {
+  @apply text-blue-600;
+}
+
+/* Main Content Area */
+.main-content {
+  @apply lg:ml-64 min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50;
+}
+
+.main-content-inner {
+  @apply p-4 lg:p-8 pb-24 lg:pb-8;
+}
+
+/* Chart Container */
+.chart-container {
+  @apply bg-white rounded-2xl shadow-lg p-4 lg:p-6;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(-10px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.animate-slide-in {
+  animation: slideIn 0.3s ease-out;
+}
+
+/* Collapsible Section */
+.collapsible-header {
+  @apply w-full px-4 py-3 flex items-center justify-between
+         hover:bg-white/50 transition-colors cursor-pointer;
+}
+
+.collapsible-content {
+  @apply overflow-hidden transition-all duration-300 ease-in-out;
+}
+
+.collapsible-content-open {
+  @apply max-h-[2000px] opacity-100;
+}
+
+.collapsible-content-closed {
+  @apply max-h-0 opacity-0;
+}
+
+/* Safe area for mobile */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+/* Utility for hiding scrollbar but keeping functionality */
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}

@@ -1,7 +1,7 @@
-import InvestmentCalculator from './InvestmentCalculator'
+import InvestmentCalculatorNew from './InvestmentCalculatorNew'
 
 function App() {
-  return <InvestmentCalculator />
+  return <InvestmentCalculatorNew />
 }
 
 export default App

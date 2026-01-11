@@ -27,8 +27,9 @@ import {
   BND_ANNUAL_RETURNS,
   CASH_ANNUAL_RETURN,
   DEFAULT_PORTFOLIO,
-  ASSET_INFO,
   getExpectedPortfolioReturn,
+  getPortfolioStdDev,
+  runMonteCarloSimulation,
 } from './constants/assetData';
 import {
   calculateWealthWithMarriage,
@@ -43,7 +44,7 @@ import {
   runMonteCarloPlan,
 } from './utils/calculations';
 import InputGroup from './components/InputGroup';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ComposedChart, Area } from 'recharts';
 
 const LOCAL_PRESET_KEY = 'vooAppCustomPresetsV1';
 
@@ -111,6 +112,12 @@ const InvestmentCalculator = () => {
   const [mcChartData, setMcChartData] = useState([]);
 
   const mcHistogramTotal = useMemo(() => mcChartData.reduce((sum, d) => sum + (d.count || 0), 0), [mcChartData]);
+  const formatEokFromManwon = (value, fractionDigits = 2) => {
+    if (value === null || value === undefined) return '-';
+    const n = Number(value);
+    if (!Number.isFinite(n)) return '-';
+    return (n / 10000).toFixed(fractionDigits);
+  };
 
   useEffect(() => {
     if (!mcResult?.samples?.length) {
@@ -169,6 +176,78 @@ const InvestmentCalculator = () => {
   useEffect(() => {
     setSavedPresets(loadLocalPresets());
   }, []);
+
+  const portfolioExpectedReturn = useMemo(
+    () => getExpectedPortfolioReturn(portfolio.allocations),
+    [portfolio.allocations]
+  );
+  const portfolioStdDev = useMemo(
+    () => getPortfolioStdDev(portfolio.allocations),
+    [portfolio.allocations]
+  );
+
+  const portfolioMcResult = useMemo(() => {
+    if (!portfolio.enabled || !portfolio.monteCarloEnabled) return null;
+    const simulations = Math.max(100, Math.min(portfolio.monteCarloSimulations || 500, 20000));
+
+    return runMonteCarloSimulation(
+      you.initial,
+      you.monthly,
+      portfolio.allocations,
+      years,
+      you.monthlyGrowthRate,
+      simulations
+    );
+  }, [
+    portfolio.enabled,
+    portfolio.monteCarloEnabled,
+    portfolio.monteCarloSimulations,
+    portfolio.allocations,
+    you.initial,
+    you.monthly,
+    you.monthlyGrowthRate,
+    years,
+  ]);
+
+  const portfolioMcChartData = useMemo(() => {
+    const percentiles = portfolioMcResult?.percentiles;
+    if (!percentiles) return [];
+
+    const toEok = (v) => (v === null || v === undefined ? null : v / 10000);
+
+    return (percentiles.p50 || []).map((_, idx) => {
+      const p10 = toEok(percentiles.p10?.[idx]);
+      const p25 = toEok(percentiles.p25?.[idx]);
+      const p50 = toEok(percentiles.p50?.[idx]);
+      const p75 = toEok(percentiles.p75?.[idx]);
+      const p90 = toEok(percentiles.p90?.[idx]);
+
+      const band90Base = p10;
+      const band90 =
+        p90 !== null && p90 !== undefined && band90Base !== null && band90Base !== undefined
+          ? Math.max(0, p90 - band90Base)
+          : null;
+
+      const band50Base = p25;
+      const band50 =
+        p75 !== null && p75 !== undefined && band50Base !== null && band50Base !== undefined
+          ? Math.max(0, p75 - band50Base)
+          : null;
+
+      return {
+        year: idx,
+        p10,
+        p25,
+        p50,
+        p75,
+        p90,
+        band90Base,
+        band90,
+        band50Base,
+        band50,
+      };
+    });
+  }, [portfolioMcResult]);
 
   const handleSavePreset = () => {
     const name = (presetName || '').trim() || `내 프리셋 ${savedPresets.length + 1}`;
@@ -1261,6 +1340,177 @@ ${chartDataWithMonteCarlo.map((data, idx) => {
             </>
           )}
         </div>
+
+        {/* 포트폴리오 변동성 몬테카를로 (자산 배분 전용) */}
+        {portfolio.enabled && (
+          <div className="bg-white p-6 rounded-lg shadow mb-8 border border-purple-100">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-3">
+              <div>
+                <h3 className="text-lg font-bold text-gray-800">🎯 포트폴리오 몬테카를로 (별도 차트)</h3>
+                <p className="text-sm text-gray-500">
+                  VOO/SCHD/BND/현금 비중과 변동성만 반영한 적립 시뮬레이션입니다. 결혼·주택·대출·은퇴 이벤트는 포함하지 않아 S&P500 기반 플랜 MC와 분리해 보여줍니다.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2 text-xs text-gray-600">
+                <div className="px-3 py-2 bg-purple-50 border border-purple-100 rounded">
+                  <div className="font-semibold text-purple-700">시뮬레이션</div>
+                  <div>{portfolioMcResult?.numSimulations || Math.max(100, Math.min(portfolio.monteCarloSimulations || 500, 20000))}회</div>
+                </div>
+                <div className="px-3 py-2 bg-blue-50 border border-blue-100 rounded">
+                  <div className="font-semibold text-blue-700">기대수익률</div>
+                  <div>{portfolioExpectedReturn.toFixed(1)}%</div>
+                </div>
+                <div className="px-3 py-2 bg-orange-50 border border-orange-100 rounded">
+                  <div className="font-semibold text-orange-700">표준편차</div>
+                  <div>{portfolioStdDev.toFixed(1)}%</div>
+                </div>
+              </div>
+            </div>
+
+            {!portfolio.monteCarloEnabled && (
+              <div className="text-sm text-gray-500">
+                포트폴리오 섹션에서 &ldquo;몬테카를로 시뮬레이션&rdquo;을 켜면 변동성 밴드 차트가 나타납니다.
+              </div>
+            )}
+
+            {portfolio.monteCarloEnabled && !portfolioMcResult && (
+              <div className="text-sm text-gray-500">
+                투자액/기간/배분을 입력하면 포트폴리오 변동성 차트가 표시됩니다.
+              </div>
+            )}
+
+            {portfolio.monteCarloEnabled && portfolioMcResult && (
+              <>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+                  <div className="p-3 rounded-lg bg-purple-50 border border-purple-100">
+                    <div className="text-xs text-gray-600">p10 (보수적)</div>
+                    <div className="text-lg font-bold text-purple-700">
+                      {formatEokFromManwon(portfolioMcResult.percentiles?.p10?.[years])}억
+                    </div>
+                  </div>
+                  <div className="p-3 rounded-lg bg-gray-50 border border-gray-200">
+                    <div className="text-xs text-gray-600">p50 (중앙값)</div>
+                    <div className="text-lg font-bold text-gray-800">
+                      {formatEokFromManwon(portfolioMcResult.percentiles?.p50?.[years])}억
+                    </div>
+                  </div>
+                  <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-100">
+                    <div className="text-xs text-gray-600">p90 (낙관적)</div>
+                    <div className="text-lg font-bold text-emerald-700">
+                      {formatEokFromManwon(portfolioMcResult.percentiles?.p90?.[years])}억
+                    </div>
+                  </div>
+                  <div className="p-3 rounded-lg bg-orange-50 border border-orange-100">
+                    <div className="text-xs text-gray-600">평균</div>
+                    <div className="text-lg font-bold text-orange-700">
+                      {formatEokFromManwon(portfolioMcResult.percentiles?.mean?.[years])}억
+                    </div>
+                  </div>
+                  <div className="p-3 rounded-lg bg-blue-50 border border-blue-100">
+                    <div className="text-xs text-gray-600">포트폴리오 예상 리턴/리스크</div>
+                    <div className="text-sm font-semibold text-blue-700">
+                      {portfolioExpectedReturn.toFixed(1)}% / σ {portfolioStdDev.toFixed(1)}%
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 h-72">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={portfolioMcChartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="portfolioMc90" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#c084fc" stopOpacity={0.45} />
+                          <stop offset="95%" stopColor="#c084fc" stopOpacity={0.05} />
+                        </linearGradient>
+                        <linearGradient id="portfolioMc50" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#a78bfa" stopOpacity={0.6} />
+                          <stop offset="95%" stopColor="#a78bfa" stopOpacity={0.1} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="year" tickFormatter={(v) => `${v}년`} />
+                      <YAxis tickFormatter={(v) => `${v.toFixed(1)}억`} />
+                      <Tooltip
+                        content={({ active, payload, label }) => {
+                          if (!active || !payload?.length) return null;
+                          const row = payload[0]?.payload;
+                          if (!row) return null;
+                          const fmt = (v) => (v === null || v === undefined ? '-' : `${v.toFixed(2)}억`);
+                          return (
+                            <div className="rounded-xl border border-purple-100 bg-white/95 p-3 shadow-lg text-xs">
+                              <div className="font-semibold text-gray-800 mb-1">{label}년 후</div>
+                              <div className="space-y-1">
+                                <div className="flex justify-between"><span>p10</span><span className="font-bold text-purple-700">{fmt(row.p10)}</span></div>
+                                <div className="flex justify-between"><span>p25</span><span className="font-bold text-purple-600">{fmt(row.p25)}</span></div>
+                                <div className="flex justify-between"><span>p50(중앙)</span><span className="font-bold text-gray-800">{fmt(row.p50)}</span></div>
+                                <div className="flex justify-between"><span>p75</span><span className="font-bold text-purple-600">{fmt(row.p75)}</span></div>
+                                <div className="flex justify-between"><span>p90</span><span className="font-bold text-emerald-700">{fmt(row.p90)}</span></div>
+                              </div>
+                            </div>
+                          );
+                        }}
+                      />
+
+                      {/* 10~90% 밴드 */}
+                      <Area
+                        type="monotone"
+                        dataKey="band90Base"
+                        stackId="mc90"
+                        stroke="none"
+                        fillOpacity={0}
+                        isAnimationActive={false}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="band90"
+                        stackId="mc90"
+                        stroke="none"
+                        fill="url(#portfolioMc90)"
+                        fillOpacity={1}
+                        isAnimationActive={false}
+                        name="10~90%"
+                      />
+
+                      {/* 25~75% 밴드 */}
+                      <Area
+                        type="monotone"
+                        dataKey="band50Base"
+                        stackId="mc50"
+                        stroke="none"
+                        fillOpacity={0}
+                        isAnimationActive={false}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="band50"
+                        stackId="mc50"
+                        stroke="none"
+                        fill="url(#portfolioMc50)"
+                        fillOpacity={1}
+                        isAnimationActive={false}
+                        name="25~75%"
+                      />
+
+                      <Line
+                        type="monotone"
+                        dataKey="p50"
+                        stroke="#7c3aed"
+                        strokeWidth={2.6}
+                        name="중앙값"
+                        dot={false}
+                      />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+                <p className="mt-2 text-xs text-gray-500 leading-relaxed">
+                  • 포트폴리오 변동성만 반영한 적립 시뮬레이션으로, 결혼/주택/대출/은퇴/배우자/인출 이벤트는 포함되지 않습니다.
+                  <br />
+                  • S&P500 기반 플랜 몬테카를로(위 카드)와 별도 계산되며, 결과를 직접 비교할 때 가정이 다름에 유의하세요.
+                </p>
+              </>
+            )}
+          </div>
+        )}
 
         {/* 대출 계산기 */}
         <div className="bg-white p-6 rounded-lg shadow mb-8 border border-gray-100">

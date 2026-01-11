@@ -12,28 +12,134 @@ import {
   ReferenceArea,
 } from 'recharts';
 
-const formatValue = (value) => `${value.toFixed(2)}억`;
+const formatValue = (value) => {
+  if (value === null || value === undefined || Number.isNaN(value)) return '-';
+  const sign = value < 0 ? '-' : '';
+  const abs = Math.abs(value);
+  return `${sign}${abs.toLocaleString('ko-KR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}억`;
+};
+
+const formatAxisTick = (value) => {
+  if (value === null || value === undefined || Number.isNaN(value)) return '';
+  const abs = Math.abs(value);
+  if (abs >= 100) return `${Math.round(value).toLocaleString('ko-KR')}억`;
+  if (abs >= 10) return `${value.toFixed(0)}억`;
+  if (abs >= 1) return `${value.toFixed(1)}억`;
+  return `${value.toFixed(2)}억`;
+};
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
 
+  const byKey = (key) => payload.find((p) => p.dataKey === key);
+  const extractDisplayValue = (item) => {
+    if (!item) return null;
+    const rawKey = `${item.dataKey}__raw`;
+    const raw = item?.payload?.[rawKey];
+    return raw !== undefined ? raw : item.value;
+  };
+
+  const keys = ['you', 'youNoMarriage', 'other', 'spouseWealth', 'house'];
+  const rows = keys
+    .map((key) => {
+      const item = byKey(key);
+      if (!item) return null;
+      const val = extractDisplayValue(item);
+      if (val === null || val === undefined) return null;
+      return {
+        key,
+        name: item.name,
+        color: item.color,
+        value: val,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
+
+  const mcP10 = extractDisplayValue(byKey('mc_p10'));
+  const mcP50 = extractDisplayValue(byKey('mc_p50'));
+  const mcP90 = extractDisplayValue(byKey('mc_p90'));
+
   return (
-    <div className="rounded-lg border border-gray-200 bg-white/90 p-3 shadow-lg backdrop-blur">
-      <div className="text-xs font-semibold text-gray-500 mb-2">{label}년 후</div>
-      <div className="space-y-1">
-        {payload.map((item) => (
-          <div key={item.dataKey} className="flex items-center justify-between text-sm">
-            <div className="flex items-center gap-2 text-gray-700">
-              <span
-                className="h-2.5 w-2.5 rounded-full"
-                style={{ backgroundColor: item.color }}
-              />
-              {item.name}
+    <div className="min-w-[200px] rounded-xl border border-gray-200 bg-white/95 p-3 shadow-xl backdrop-blur-sm">
+      <div className="mb-2 border-b pb-1 text-sm font-bold text-gray-700">{label}년 후 자산</div>
+      <div className="space-y-1.5">
+        {rows.map((row) => (
+          <div key={row.key} className="flex items-center justify-between text-sm">
+            <div className="flex items-center gap-2 text-gray-600">
+              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: row.color }} />
+              {row.name}
             </div>
-            <span className="font-semibold text-gray-900">{formatValue(item.value)}</span>
+            <span className="font-bold text-gray-800">{formatValue(row.value)}</span>
           </div>
         ))}
+
+        {(mcP10 !== null && mcP10 !== undefined) ||
+        (mcP50 !== null && mcP50 !== undefined) ||
+        (mcP90 !== null && mcP90 !== undefined) ? (
+          <div className="pt-2 mt-2 border-t text-sm">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-gray-600">
+                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: '#d946ef' }} />
+                몬테카를로(중앙값)
+              </div>
+              <span className="font-bold text-gray-800">{formatValue(mcP50 ?? null)}</span>
+            </div>
+            {mcP10 !== null && mcP10 !== undefined && mcP90 !== null && mcP90 !== undefined && (
+              <div className="flex items-center justify-between text-xs text-gray-500 mt-1">
+                <span>범위(10~90%)</span>
+                <span className="font-medium text-gray-700">
+                  {formatValue(mcP10)} ~ {formatValue(mcP90)}
+                </span>
+              </div>
+            )}
+          </div>
+        ) : null}
       </div>
+    </div>
+  );
+};
+
+const CustomLegend = ({ payload, chartData, marriagePlan, monteCarloEnabled, useHouseInChart }) => {
+  const lastDataPoint = chartData?.[chartData.length - 1];
+  if (!lastDataPoint) return null;
+
+  const allowed = ['you', 'youNoMarriage', 'other', 'spouseWealth', 'house'];
+  if (monteCarloEnabled) allowed.push('mc_p50');
+  const legendItems = payload.filter((p) => allowed.includes(p.dataKey));
+
+  return (
+    <div className="flex flex-wrap justify-center items-center gap-x-6 gap-y-2 mt-3 text-xs sm:text-sm text-gray-700">
+      {legendItems
+        .filter((entry) => {
+          if (!marriagePlan.enabled && entry.dataKey === 'youNoMarriage') return false;
+          if (!marriagePlan.enabled && entry.dataKey === 'spouseWealth') return false;
+          if (!(marriagePlan.enabled && marriagePlan.buyHouse && useHouseInChart) && entry.dataKey === 'house') return false;
+          return true;
+        })
+        .map((entry) => {
+        let { dataKey, color, value: name } = entry;
+        
+        if (!name || name.startsWith('mc_p')) {
+             if (dataKey === 'mc_p50') name = 'MC 중앙값';
+             else return null;
+        }
+
+        const finalValue = lastDataPoint?.[`${dataKey}__raw`] ?? lastDataPoint?.[dataKey];
+        
+        if (finalValue === undefined || finalValue === null) return null;
+
+        return (
+          <div key={`item-${dataKey}`} className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
+            <span>{name}:</span>
+            <span className="font-bold text-gray-800">{formatValue(finalValue)}</span>
+          </div>
+        );
+      })}
     </div>
   );
 };
@@ -75,59 +181,116 @@ const WealthChart = ({
     });
     return min;
   }, Infinity);
-  const yDomainMin = Number.isFinite(minPositive) ? Math.max(minPositive * 0.5, 0.001) : 0.001;
-  // 데이터 최솟값 계산 (음수 허용)
-  const dataMin = chartData.reduce((min, point) => {
-    ['you', 'youNoMarriage', 'other'].forEach((key) => {
-      const val = point[key];
-      if (val !== null && val !== undefined && val < min) min = val;
-    });
-    return min;
-  }, 0);
+  // 로그 스케일에서 0 이하 값은 표시를 위해 작은 양수로 clamp
+  const yDomainMin = Number.isFinite(minPositive)
+    ? Math.max(Math.min(minPositive * 0.1, 1), 0.001)
+    : 0.001;
   const sanitizedData = chartData.map((d) => {
-    // 로그 스케일용: 음수/0 → 작은 양수로 대체
     const clampForLog = (val) => {
       if (val === null || val === undefined) return null;
       return val > 0 ? val : yDomainMin;
     };
-    // 선형 스케일용: 음수 허용
     const clampForLinear = (val) => {
       if (val === null || val === undefined) return null;
       return val;
     };
     const clamp = useLogScale ? clampForLog : clampForLinear;
-    const base = {
-      ...d,
-      you: clamp(d.you),
-      youNoMarriage: clamp(d.youNoMarriage),
-      other: clamp(d.other),
-      house: clamp(d.house),
-      spouseWealth: clamp(d.spouseWealth),
-      remainingLoan: clamp(d.remainingLoan),
-      mc_p10: clamp(d.mc_p10),
-      mc_p25: clamp(d.mc_p25),
-      mc_p50: clamp(d.mc_p50),
-      mc_p75: clamp(d.mc_p75),
-      mc_p90: clamp(d.mc_p90),
-      mc_mean: clamp(d.mc_mean),
-    };
-    // 집 제외 옵션: 집 가치 제거, 남은 대출은 다시 더해 금융자산만 표시
-    if (!useHouseInChart) {
-      base.you = clamp((base.you ?? 0) - (base.house ?? 0) + (base.remainingLoan ?? 0));
-    }
-    if (!useRealAsset) return base;
-    const factor = Math.pow(1 + (inflationRate || 0) / 100, d.year || 0);
+
+    const factor = useRealAsset
+      ? Math.pow(1 + (inflationRate || 0) / 100, d.year || 0)
+      : 1;
     const adjust = (val) => (val === null || val === undefined ? val : val / (factor || 1));
+
+    const houseRaw = adjust(d.house);
+    const remainingLoanRaw = adjust(d.remainingLoan);
+
+    const applyHouseExclusion = (val) => {
+      if (val === null || val === undefined) return val;
+      if (useHouseInChart) return val;
+      return val - (houseRaw ?? 0) + (remainingLoanRaw ?? 0);
+    };
+
+    const youRaw = applyHouseExclusion(adjust(d.you));
+    const youNoMarriageRaw = adjust(d.youNoMarriage);
+    const otherRaw = adjust(d.other);
+    const spouseWealthRaw = adjust(d.spouseWealth);
+
+    // MC 값은 SimulatorContext에서 이미 집 포함/제외가 선택된 데이터가 전달됨
+    // 여기서는 실질가치 조정(adjust)만 적용 (applyHouseExclusion 불필요)
+    const mcP10Raw = adjust(d.mc_p10);
+    const mcP25Raw = adjust(d.mc_p25);
+    const mcP50Raw = adjust(d.mc_p50);
+    const mcP75Raw = adjust(d.mc_p75);
+    const mcP90Raw = adjust(d.mc_p90);
+    const mcMeanRaw = adjust(d.mc_mean);
+
+    const you = clamp(youRaw);
+    const youNoMarriage = clamp(youNoMarriageRaw);
+    const other = clamp(otherRaw);
+    const spouseWealth = clamp(spouseWealthRaw);
+    const house = clamp(houseRaw);
+    const remainingLoan = clamp(remainingLoanRaw);
+
+    const mc_p10 = clamp(mcP10Raw);
+    const mc_p25 = clamp(mcP25Raw);
+    const mc_p50 = clamp(mcP50Raw);
+    const mc_p75 = clamp(mcP75Raw);
+    const mc_p90 = clamp(mcP90Raw);
+    const mc_mean = clamp(mcMeanRaw);
+
+    // 로그 스케일에서 밴드는 스택 Area로 표현(p10 baseline + (p90-p10))
+    const mcOuterBase = mc_p10;
+    const mcOuter =
+      mc_p90 === null || mc_p90 === undefined || mcOuterBase === null || mcOuterBase === undefined
+        ? null
+        : Math.max(0, mc_p90 - mcOuterBase);
+    const mcInnerBase = mc_p25;
+    const mcInner =
+      mc_p75 === null || mc_p75 === undefined || mcInnerBase === null || mcInnerBase === undefined
+        ? null
+        : Math.max(0, mc_p75 - mcInnerBase);
+
     return {
-      ...base,
-      you: adjust(base.you),
-      youNoMarriage: adjust(base.youNoMarriage),
-      other: adjust(base.other),
-      house: adjust(base.house),
-      spouseWealth: adjust(base.spouseWealth),
-      remainingLoan: adjust(base.remainingLoan),
+      ...d,
+      you,
+      youNoMarriage,
+      other,
+      house,
+      spouseWealth,
+      remainingLoan,
+      mc_p10,
+      mc_p25,
+      mc_p50,
+      mc_p75,
+      mc_p90,
+      mc_mean,
+      mcOuterBase,
+      mcOuter,
+      mcInnerBase,
+      mcInner,
+      // raw values for tooltip/legend
+      you__raw: youRaw,
+      youNoMarriage__raw: youNoMarriageRaw,
+      other__raw: otherRaw,
+      house__raw: houseRaw,
+      spouseWealth__raw: spouseWealthRaw,
+      remainingLoan__raw: remainingLoanRaw,
+      mc_p10__raw: mcP10Raw,
+      mc_p25__raw: mcP25Raw,
+      mc_p50__raw: mcP50Raw,
+      mc_p75__raw: mcP75Raw,
+      mc_p90__raw: mcP90Raw,
+      mc_mean__raw: mcMeanRaw,
     };
   });
+  // 선형 스케일 도메인 계산(옵션 적용 후 값 기준)
+  const dataMin = sanitizedData.reduce((min, point) => {
+    ['you__raw', 'youNoMarriage__raw', 'other__raw', 'spouseWealth__raw', 'mc_p50__raw'].forEach((key) => {
+      const val = point[key];
+      if (val !== null && val !== undefined && Number.isFinite(val) && val < min) min = val;
+    });
+    return min;
+  }, 0);
   const loanCompletionYear =
     marriagePlan.enabled && marriagePlan.buyHouse
       ? marriagePlan.yearOfMarriage +
@@ -145,10 +308,9 @@ const WealthChart = ({
   );
 
   return (
-    <div className="bg-white/90 backdrop-blur p-6 rounded-2xl shadow-lg border border-gray-100 mb-8">
+    <div className="mb-8">
       <div className="flex items-center justify-between mb-3">
         <div>
-          <h2 className="text-xl font-bold text-gray-800">자산 증가 추이</h2>
           <p className="text-sm text-gray-500">이벤트 구간(결혼/은퇴/대출완료)과 함께 비교해 보세요.</p>
         </div>
         <div className="flex items-center gap-2">
@@ -227,7 +389,7 @@ const WealthChart = ({
             </linearGradient>
           </defs>
 
-          <CartesianGrid strokeDasharray="2 6" stroke="#e5e7eb" />
+          <CartesianGrid vertical={false} strokeDasharray="3 7" stroke="#f1f5f9" />
           <XAxis
             dataKey="year"
             type="number"
@@ -244,11 +406,21 @@ const WealthChart = ({
             scale={useLogScale ? 'log' : 'linear'}
             domain={useLogScale ? [yDomainMin, 'auto'] : [dataMin < 0 ? dataMin * 1.1 : 0, 'auto']}
             allowDataOverflow={useLogScale}
-            tickFormatter={(value) => value.toFixed(0)}
+            tickFormatter={formatAxisTick}
             label={{ value: '자산 (억원)', angle: -90, position: 'insideLeft', fill: '#6b7280' }}
           />
           <Tooltip content={<CustomTooltip />} />
-          <Legend wrapperStyle={{ paddingTop: 8 }} />
+          <Legend
+            content={
+              <CustomLegend
+                chartData={sanitizedData}
+                marriagePlan={marriagePlan}
+                monteCarloEnabled={monteCarloEnabled}
+                useHouseInChart={useHouseInChart}
+              />
+            }
+            wrapperStyle={{ paddingTop: 20 }}
+          />
 
           {/* 은퇴 이후 구간 강조 */}
           {retirementPlan.enabled &&
@@ -349,66 +521,111 @@ const WealthChart = ({
             />
           )}
 
-          {/* Monte Carlo 밴드 - Line으로 표시 */}
-          {monteCarloEnabled && (
-            <Line
-              type="monotone"
-              dataKey="mc_p90"
-              stroke="#a855f7"
-              strokeWidth={1}
-              strokeDasharray="2 2"
-              name="90% (상위)"
-              dot={false}
-              opacity={0.6}
-            />
+          {/* Monte Carlo 밴드 */}
+          {monteCarloEnabled && useLogScale && (
+            <>
+              <Area
+                type="monotone"
+                dataKey="mcOuterBase"
+                stackId="mcOuter"
+                stroke="none"
+                fillOpacity={0}
+                isAnimationActive={false}
+                legendType="none"
+                name="MC baseline"
+                dot={false}
+              />
+              <Area
+                type="monotone"
+                dataKey="mcOuter"
+                stackId="mcOuter"
+                stroke="none"
+                fill="url(#mcBandGradient)"
+                fillOpacity={1}
+                isAnimationActive={false}
+                legendType="none"
+                name="MC 10~90%"
+                dot={false}
+              />
+              <Area
+                type="monotone"
+                dataKey="mcInnerBase"
+                stackId="mcInner"
+                stroke="none"
+                fillOpacity={0}
+                isAnimationActive={false}
+                legendType="none"
+                name="MC inner baseline"
+                dot={false}
+              />
+              <Area
+                type="monotone"
+                dataKey="mcInner"
+                stackId="mcInner"
+                stroke="none"
+                fill="url(#mcBandInnerGradient)"
+                fillOpacity={1}
+                isAnimationActive={false}
+                legendType="none"
+                name="MC 25~75%"
+                dot={false}
+              />
+            </>
           )}
-          {monteCarloEnabled && (
-            <Line
-              type="monotone"
-              dataKey="mc_p10"
-              stroke="#a855f7"
-              strokeWidth={1}
-              strokeDasharray="2 2"
-              name="10% (하위)"
-              dot={false}
-              opacity={0.6}
-            />
-          )}
-          {monteCarloEnabled && (
-            <Line
-              type="monotone"
-              dataKey="mc_p75"
-              stroke="#c084fc"
-              strokeWidth={1.5}
-              strokeDasharray="4 2"
-              name="75%"
-              dot={false}
-              opacity={0.7}
-            />
-          )}
-          {monteCarloEnabled && (
-            <Line
-              type="monotone"
-              dataKey="mc_p25"
-              stroke="#c084fc"
-              strokeWidth={1.5}
-              strokeDasharray="4 2"
-              name="25%"
-              dot={false}
-              opacity={0.7}
-            />
-          )}
-          {/* Monte Carlo 중간값 라인 */}
           {monteCarloEnabled && (
             <Line
               type="monotone"
               dataKey="mc_p50"
-              stroke="#9333ea"
-              strokeWidth={2}
-              strokeDasharray="5 3"
-              name="중간값 (50%)"
+              stroke="#d946ef"
+              strokeWidth={2.5}
+              name="MC 중앙값"
               dot={false}
+              opacity={0.9}
             />
+          )}
+          {monteCarloEnabled && !useLogScale && (
+            <>
+              <Line
+                type="monotone"
+                dataKey="mc_p10"
+                stroke="#a855f7"
+                strokeWidth={1.5}
+                strokeDasharray="3 3"
+                name="MC p10"
+                dot={false}
+                opacity={0.5}
+              />
+              <Line
+                type="monotone"
+                dataKey="mc_p25"
+                stroke="#c084fc"
+                strokeWidth={2}
+                strokeDasharray="5 3"
+                name="MC p25"
+                dot={false}
+                opacity={0.6}
+              />
+              <Line
+                type="monotone"
+                dataKey="mc_p75"
+                stroke="#c084fc"
+                strokeWidth={2}
+                strokeDasharray="5 3"
+                name="MC p75"
+                dot={false}
+                opacity={0.6}
+              />
+              <Line
+                type="monotone"
+                dataKey="mc_p90"
+                stroke="#a855f7"
+                strokeWidth={1.5}
+                strokeDasharray="3 3"
+                name="MC p90"
+                dot={false}
+                opacity={0.5}
+              />
+            </>
           )}
 
           <Area

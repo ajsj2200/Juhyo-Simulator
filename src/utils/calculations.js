@@ -125,6 +125,7 @@ export const runMonteCarloPlan = (person, years, marriage, retirement, annualRet
   const rng = mulberry32(seed >>> 0);
   const results = [];
   const yearlyWealths = Array.from({ length: years + 1 }, () => []);
+  const yearlyWealthsWithHouse = Array.from({ length: years + 1 }, () => []);  // 집값 포함 버전
   let belowZero = 0;
   let belowZeroFinancial = 0;
 
@@ -146,11 +147,16 @@ export const runMonteCarloPlan = (person, years, marriage, retirement, annualRet
     if (wealth < 0) belowZero += 1;
     results.push(wealth);
 
+    // 금융자산만 (집 제외)
     const path = wealthResult.yearlyData?.map((d) => d.wealth) || [];
+    // 집값 포함 순자산
+    const pathWithHouse = wealthResult.yearlyData?.map((d) => d.wealthWithHouse ?? d.wealth) || [];
+    
     const endFinancial = path[years] ?? wealth;
     if (endFinancial < 0) belowZeroFinancial += 1;
     for (let y = 0; y <= years; y++) {
       yearlyWealths[y].push(path[y] ?? wealth);
+      yearlyWealthsWithHouse[y].push(pathWithHouse[y] ?? wealth);
     }
   }
 
@@ -161,7 +167,18 @@ export const runMonteCarloPlan = (person, years, marriage, retirement, annualRet
   };
   const mean = results.reduce((s, v) => s + v, 0) / results.length;
 
+  // 금융자산만 기준 percentiles (집 제외)
   const percentilesByYear = {
+    p10: [],
+    p25: [],
+    p50: [],
+    p75: [],
+    p90: [],
+    mean: [],
+  };
+
+  // 집값 포함 기준 percentiles (집 포함)
+  const percentilesByYearWithHouse = {
     p10: [],
     p25: [],
     p50: [],
@@ -176,6 +193,7 @@ export const runMonteCarloPlan = (person, years, marriage, retirement, annualRet
   };
 
   for (let y = 0; y <= years; y++) {
+    // 금융자산만 (집 제외)
     const arr = yearlyWealths[y];
     arr.sort((a, b) => a - b);
     percentilesByYear.p10.push(pickFromSorted(arr, 0.1));
@@ -184,6 +202,16 @@ export const runMonteCarloPlan = (person, years, marriage, retirement, annualRet
     percentilesByYear.p75.push(pickFromSorted(arr, 0.75));
     percentilesByYear.p90.push(pickFromSorted(arr, 0.9));
     percentilesByYear.mean.push(arr.reduce((s, v) => s + v, 0) / arr.length);
+
+    // 집값 포함 (집 포함)
+    const arrWithHouse = yearlyWealthsWithHouse[y];
+    arrWithHouse.sort((a, b) => a - b);
+    percentilesByYearWithHouse.p10.push(pickFromSorted(arrWithHouse, 0.1));
+    percentilesByYearWithHouse.p25.push(pickFromSorted(arrWithHouse, 0.25));
+    percentilesByYearWithHouse.p50.push(pickFromSorted(arrWithHouse, 0.5));
+    percentilesByYearWithHouse.p75.push(pickFromSorted(arrWithHouse, 0.75));
+    percentilesByYearWithHouse.p90.push(pickFromSorted(arrWithHouse, 0.9));
+    percentilesByYearWithHouse.mean.push(arrWithHouse.reduce((s, v) => s + v, 0) / arrWithHouse.length);
   }
 
   const payload = {
@@ -202,7 +230,8 @@ export const runMonteCarloPlan = (person, years, marriage, retirement, annualRet
     mean,
     belowZeroProbability: results.length ? belowZero / results.length : 0,
     belowZeroFinancialProbability: results.length ? belowZeroFinancial / results.length : 0,
-    percentilesByYear,
+    percentilesByYear,  // 금융자산만 (집 제외)
+    percentilesByYearWithHouse,  // 집값 포함 (집 포함)
   };
 
   if (includeSamples) {
@@ -876,11 +905,36 @@ export const calculateWealthWithMarriageHistorical = (
   // 메인 차트의 calculateWealthWithMarriage(you, y, ...)와 동일한 시점
   const yearlyData = [];
 
+  // 현재 집값과 대출잔액 추적용 변수 (yearlyData 저장용)
+  let currentHouseValueForData = marriage.buyHouse ? marriage.housePrice : 0;
+
   for (let year = 0; year <= targetYear; year++) {
+    // year년 시점의 집값 포함 순자산 계산
+    let wealthWithHouse = youWealth + spouseWealth;
+    if (marriage.buyHouse && year >= yearOfHousePurchase) {
+      // 현재 시점까지의 집값 상승 계산
+      const monthsSinceHousePurchase = Math.max(0, Math.floor((year - yearOfHousePurchase) * 12));
+      const currentHouseVal = marriage.housePrice * Math.pow(1 + houseAppreciationMonthlyRate, monthsSinceHousePurchase);
+      wealthWithHouse += currentHouseVal;
+      
+      // 대출잔액 차감
+      if (!loanPaidOff) {
+        const loanInfo = getLoanPaymentAtMonth(
+          marriage.loanAmount,
+          marriage.loanRate,
+          marriage.loanYears,
+          marriage.repaymentType,
+          monthsSinceHousePurchase
+        );
+        wealthWithHouse -= loanInfo.remainingPrincipal;
+      }
+    }
+
     // year년 시뮬레이션 결과를 저장 (year년 동안 진행 후)
     yearlyData.push({
       year,
-      wealth: youWealth + spouseWealth,
+      wealth: youWealth + spouseWealth,  // 금융자산만 (집 제외)
+      wealthWithHouse,  // 집값 포함 순자산 (집 포함)
       returnRate: year > 0 ? (annualReturns[(year - 1) % annualReturns.length] || 0) : null,
     });
 

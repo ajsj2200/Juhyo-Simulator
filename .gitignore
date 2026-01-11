@@ -43,3 +43,9 @@ coverage
 .cache
 .turbo
 .pnp.*
+
+# Electron build artifacts
+release
+build
+*.exe
+*.dll

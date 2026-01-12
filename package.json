@@ -46,14 +46,15 @@
       "electron/**/*"
     ],
     "directories": {
-      "buildResources": "build",
+      "buildResources": "public",
       "output": "release"
     },
     "win": {
       "target": [
         "portable"
       ],
-      "icon": "build/icon.ico"
+      "signAndEditExecutable": false,
+      "icon": "public/favicon.ico"
     },
     "mac": {
       "target": [

@@ -45,8 +45,12 @@
       "dist/**/*",
       "electron/**/*"
     ],
+    "nsis": {
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
+    },
     "directories": {
-      "buildResources": "public",
+      "buildResources": "build",
       "output": "release"
     },
     "win": {
@@ -54,7 +58,7 @@
         "portable"
       ],
       "signAndEditExecutable": false,
-      "icon": "public/favicon.ico"
+      "icon": "icon.ico"
     },
     "mac": {
       "target": [

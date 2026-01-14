@@ -26,6 +26,8 @@ const CrisisView = () => {
     setUseHistoricalReturns,
     historicalStartYear,
     setHistoricalStartYear,
+    useExchangeRate,
+    setUseExchangeRate,
     SP500_YEARS,
     mcResult,
     clearSp500MonteCarlo,
@@ -107,6 +109,27 @@ const CrisisView = () => {
             </p>
             <div className="mt-2 text-xs text-gray-600">
               선택 연도 수익률: <span className="font-semibold">{(selectedReturn ?? 0).toFixed(2)}%</span>
+            </div>
+
+            {/* 환율 반영 토글 */}
+            <div className="mt-4 p-4 bg-white/50 rounded-lg border border-green-100 animate-fade-in">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-semibold text-gray-800 text-sm">원/달러 환율 변동 반영</h4>
+                  <p className="text-[11px] text-gray-600 mt-0.5">
+                    과거 실제 환율 변동을 적용하여 원화 기준 수익률을 계산합니다.
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer scale-90">
+                  <input
+                    type="checkbox"
+                    className="sr-only peer"
+                    checked={useExchangeRate}
+                    onChange={(e) => setUseExchangeRate(e.target.checked)}
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                </label>
+              </div>
             </div>
 
             <div className="mt-4 rounded-xl border border-gray-200 bg-white/70 p-3">

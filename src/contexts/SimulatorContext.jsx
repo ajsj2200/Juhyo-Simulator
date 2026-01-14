@@ -14,6 +14,7 @@ import {
   SP500_YEARS,
   SP500_STATS,
 } from '../constants/sp500History';
+import { HISTORICAL_EXCHANGE_RATES } from '../constants/exchangeHistory';
 import {
   SCHD_ANNUAL_RETURNS,
   BND_ANNUAL_RETURNS,
@@ -104,6 +105,7 @@ export const SimulatorProvider = ({ children }) => {
   // Historical Mode
   const [useHistoricalReturns, setUseHistoricalReturns] = useState(false);
   const [historicalStartYear, setHistoricalStartYear] = useState(1975);
+  const [useExchangeRate, setUseExchangeRate] = useState(false);
 
   // Asset Tracking (자산 추적)
   const [assetRecords, setAssetRecords] = useState([]);
@@ -206,12 +208,29 @@ export const SimulatorProvider = ({ children }) => {
     const startIndex = SP500_YEARS.indexOf(historicalStartYear);
     if (startIndex === -1) return SP500_RETURNS_ARRAY;
     const result = [];
+
     for (let i = 0; i < years + 1; i++) {
       const index = (startIndex + i) % SP500_RETURNS_ARRAY.length;
-      result.push(SP500_RETURNS_ARRAY[index]);
+      const sp500Return = SP500_RETURNS_ARRAY[index];
+      const currentYear = SP500_YEARS[(startIndex + i) % SP500_YEARS.length];
+
+      let adjustedReturn = sp500Return;
+
+      if (useExchangeRate) {
+        // 환율 반영: (1 + r_usd) * (rate_end / rate_start) - 1
+        const rateStart = HISTORICAL_EXCHANGE_RATES[currentYear];
+        const rateEnd = HISTORICAL_EXCHANGE_RATES[currentYear + 1] || rateStart; // 다음 해 데이터 없으면 변동 없음 가정
+
+        if (rateStart && rateEnd) {
+          const fxEffect = rateEnd / rateStart;
+          adjustedReturn = (1 + sp500Return) * fxEffect - 1;
+        }
+      }
+
+      result.push(adjustedReturn);
     }
     return result;
-  }, [useHistoricalReturns, historicalStartYear, years]);
+  }, [useHistoricalReturns, historicalStartYear, years, useExchangeRate]);
 
   // Portfolio rate calculation (including custom stocks)
   const portfolioRate = useMemo(() => {
@@ -966,6 +985,21 @@ ${portfolio.monteCarloEnabled ? '• 몬테카를로 적용: 예 (포트폴리�
 `
   : '';
 
+    const historicalInfo = useHistoricalReturns
+      ? `
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📜 S&P 500 과거 데이터 시뮬레이션 (Deterministic)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• 방식: 특정 과거 시점부터의 실제 수익률을 연도별로 순차 대입
+• 시작 연도: ${historicalStartYear}년
+• 데이터: S&P 500 실제 연간 수익률 (배당 재투자 포함)
+• 환율 반영: ${useExchangeRate ? '✅ 예 (원/달러 환율 변동 적용)' : '❌ 아니오 (달러 기준 수익률만 적용)'}
+• 설명: 난수를 섞는 몬테카를로와 달리, 정해진 역사의 흐름을 그대로 인생 플랜에 대입하여 "그 당시에 투자했다면 어땠을까?"를 시뮬레이션합니다.
+${useExchangeRate ? '  → IMF(1997)나 금융위기(2008) 등 환율 급등 시기의 자산 방어/증가 효과가 반영됩니다.' : ''}
+`
+      : '';
+
     const crisisInfo = crisis.enabled
       ? `
 
@@ -991,7 +1025,7 @@ ${portfolio.monteCarloEnabled ? '• 몬테카를로 적용: 예 (포트폴리�
 • 월 투자 가능액: ${you.monthly.toLocaleString()}만원 (저축률 ${youSavingsRate}%)
 • 초기 자산: ${you.initial.toLocaleString()}만원
 • 투자액 증가율: ${you.monthlyGrowthRate}%/년
-• 연평균 수익률 가정: ${you.rate}%
+• 연평균 수익률 가정: ${useHistoricalReturns ? `S&P 500 역사적 수익률 (${historicalStartYear}년~)` : `${you.rate}%`}
 • 은퇴 목표: ${you.retireYear}년 후
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1002,7 +1036,7 @@ ${portfolio.monteCarloEnabled ? '• 몬테카를로 적용: 예 (포트폴리�
 • 월 투자액: ${other.monthly.toLocaleString()}만원 (저축률 ${otherSavingsRate}%)
 • 연 수익률: ${other.rate}%
 
-${marriageInfo}${retirementInfo}${crisisInfo}${portfolioInfo}${monteCarloInfo}
+${marriageInfo}${retirementInfo}${crisisInfo}${portfolioInfo}${monteCarloInfo}${historicalInfo}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🏁 최종 결과 요약 (${years}년 후)
@@ -1079,6 +1113,8 @@ ${chartDataWithMonteCarlo.map((data, idx) => {
     portfolioRate,
     otherUseCompound,
     copyTimeoutId,
+    useHistoricalReturns,
+    historicalStartYear,
   ]);
 
   const applyPreset = useCallback(
@@ -1126,6 +1162,7 @@ ${chartDataWithMonteCarlo.map((data, idx) => {
         useHouseInChart,
         useHistoricalReturns,
         historicalStartYear,
+        useExchangeRate,
       },
     };
     const next = [payload, ...savedPresets];
@@ -1446,7 +1483,8 @@ ${chartDataWithMonteCarlo.map((data, idx) => {
     setUseHistoricalReturns,
     historicalStartYear,
     setHistoricalStartYear,
-    historicalReturns,
+    useExchangeRate,
+    setUseExchangeRate,
 
     // Loan calculator
     loanCalc,

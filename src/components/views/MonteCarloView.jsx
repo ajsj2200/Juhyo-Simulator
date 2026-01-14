@@ -21,7 +21,10 @@ const MonteCarloView = () => {
     useHistoricalReturns,
     setUseHistoricalReturns,
     portfolio,
+
     setPortfolio,
+    useExchangeRate,
+    setUseExchangeRate,
   } = useSimulator();
 
   const [exclusiveModalOpen, setExclusiveModalOpen] = useState(false);
@@ -121,6 +124,30 @@ const MonteCarloView = () => {
               </button>
             </div>
           </div>
+
+          {/* 환율 반영 토글 (과거 데이터 모드 전용) */}
+          {useHistoricalReturns && (
+            <div className="mt-4 p-4 bg-yellow-50 rounded-lg border border-yellow-100 animate-fade-in">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-semibold text-gray-800">원/달러 환율 변동 반영</h4>
+                  <p className="text-sm text-gray-600 mt-1">
+                    과거 실제 환율 변동을 적용하여 원화 기준 수익률을 계산합니다.<br/>
+                    (IMF 위기 등 환율 급등 시기의 자산 방어 효과를 확인할 수 있습니다)
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="sr-only peer"
+                    checked={useExchangeRate}
+                    onChange={(e) => setUseExchangeRate(e.target.checked)}
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                </label>
+              </div>
+            </div>
+          )}
 
           <div className="mt-4 text-xs text-gray-600 space-y-1 bg-gray-50 p-3 rounded-lg">
             <p>• <strong>샘플링:</strong> {startYear}~{SP500_STATS.endYear} 수익률 목록에서 1개를 복원추출로 뽑아 {years}년 시퀀스를 만듭니다.</p>

@@ -176,6 +176,10 @@ export const runMonteCarloPlan = (person, years, marriage, retirement, annualRet
     p90: [],
     mean: [],
   };
+  let samplesByYear = null;
+  if (includeSamples) {
+    samplesByYear = yearlyWealths.map((arr) => [...arr]);
+  }
 
   // 집값 포함 기준 percentiles (집 포함)
   const percentilesByYearWithHouse = {
@@ -236,6 +240,7 @@ export const runMonteCarloPlan = (person, years, marriage, retirement, annualRet
 
   if (includeSamples) {
     payload.samples = results;
+    payload.samplesByYear = samplesByYear;
   }
 
   return payload;

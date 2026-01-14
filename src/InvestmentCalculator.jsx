@@ -124,6 +124,7 @@ const runPortfolioPlanMonteCarlo = (
     p90: [],
     mean: [],
   };
+  const samplesByYear = yearlyWealths.map((arr) => [...arr]);
 
   for (let y = 0; y <= years; y++) {
     const arr = yearlyWealths[y];
@@ -160,6 +161,7 @@ const runPortfolioPlanMonteCarlo = (
     belowZeroProbability: results.length ? belowZero / results.length : 0,
     belowZeroFinancialProbability: results.length ? belowZeroFinancial / results.length : 0,
     percentilesByYear,
+    samplesByYear,
     expectedReturn: expected,
     stdDev,
   };
@@ -226,11 +228,19 @@ const InvestmentCalculator = () => {
   const [mcAccumulateEnabled, setMcAccumulateEnabled] = useState(false);
   const [mcAccumulateKey, setMcAccumulateKey] = useState('');
   const [mcResult, setMcResult] = useState(null);
-  const [mcChartData, setMcChartData] = useState([]);
+  const [mcHistogramYear, setMcHistogramYear] = useState(years);
+  const [mcHistogramData, setMcHistogramData] = useState([]);
   const [mcError, setMcError] = useState('');
   const [mcRunning, setMcRunning] = useState(false);
 
-  const mcHistogramTotal = useMemo(() => mcChartData.reduce((sum, d) => sum + (d.count || 0), 0), [mcChartData]);
+  const mcHistogramTotal = useMemo(
+    () => mcHistogramData.reduce((sum, d) => sum + (d.count || 0), 0),
+    [mcHistogramData]
+  );
+  const portfolioMcHistogramTotal = useMemo(
+    () => portfolioMcHistogramData.reduce((sum, d) => sum + (d.count || 0), 0),
+    [portfolioMcHistogramData]
+  );
   const formatEokFromManwon = (value, fractionDigits = 2) => {
     if (value === null || value === undefined) return '-';
     const n = Number(value);
@@ -238,39 +248,23 @@ const InvestmentCalculator = () => {
     return (n / 10000).toFixed(fractionDigits);
   };
 
-  useEffect(() => {
-    if (!mcResult?.samples?.length) {
-      setMcChartData([]);
-      return;
-    }
-    const samples = mcResult.samples;
-    // 음수나 0 이하 값 필터링 (로그 스케일용)
-    const positiveSamples = samples.filter((v) => v > 0);
-    if (positiveSamples.length === 0) {
-      setMcChartData([]);
-      return;
-    }
+  const buildHistogram = (samples = [], bins = 18) => {
+    if (!samples?.length) return [];
+    const positiveSamples = samples.filter((v) => Number.isFinite(v) && v > 0).sort((a, b) => a - b);
+    if (positiveSamples.length === 0) return [];
     const min = positiveSamples[0];
     const max = positiveSamples[positiveSamples.length - 1];
-    if (!Number.isFinite(min) || !Number.isFinite(max) || min <= 0) {
-      setMcChartData([]);
-      return;
-    }
-    
-    // 로그 스케일 빈: 작은 값은 세밀하게, 큰 값은 넓게
-    const bins = 18;
+    if (!Number.isFinite(min) || !Number.isFinite(max) || min <= 0) return [];
     const logMin = Math.log10(min);
     const logMax = Math.log10(max);
     const logWidth = logMax === logMin ? 1 : (logMax - logMin) / bins;
     const histogram = new Array(bins).fill(0);
-    
     positiveSamples.forEach((v) => {
       const logV = Math.log10(v);
       const idx = logMax === logMin ? 0 : Math.min(bins - 1, Math.floor((logV - logMin) / logWidth));
       histogram[idx] += 1;
     });
-    
-    const data = histogram.map((count, i) => {
+    return histogram.map((count, i) => {
       const start = Math.pow(10, logMin + i * logWidth);
       const end = Math.pow(10, logMin + (i + 1) * logWidth);
       return {
@@ -278,8 +272,24 @@ const InvestmentCalculator = () => {
         count,
       };
     });
-    setMcChartData(data);
-  }, [mcResult]);
+  };
+
+  useEffect(() => {
+    const data = buildHistogram(mcResult?.samplesByYear?.[mcHistogramYear]);
+    setMcHistogramData(data);
+  }, [mcResult, mcHistogramYear]);
+
+  useEffect(() => {
+    const data = buildHistogram(portfolioMcResult?.samplesByYear?.[portfolioMcYear]);
+    setPortfolioMcHistogramData(data);
+  }, [portfolioMcResult, portfolioMcYear]);
+
+  useEffect(() => {
+    setMcHistogramYear((prev) => Math.min(prev, years));
+  }, [years]);
+  useEffect(() => {
+    setPortfolioMcYear((prev) => Math.min(prev, years));
+  }, [years]);
   // 로컬 프리셋
   const [savedPresets, setSavedPresets] = useState([]);
   const [presetName, setPresetName] = useState('');
@@ -304,6 +314,8 @@ const InvestmentCalculator = () => {
     () => getPortfolioStdDev(portfolio.allocations),
     [portfolio.allocations]
   );
+  const [portfolioMcYear, setPortfolioMcYear] = useState(years);
+  const [portfolioMcHistogramData, setPortfolioMcHistogramData] = useState([]);
 
   const portfolioMcResult = useMemo(() => {
     if (!portfolio.enabled || !portfolio.monteCarloEnabled) return null;
@@ -1432,10 +1444,24 @@ ${chartDataWithMonteCarlo.map((data, idx) => {
                   <div className="text-lg font-bold text-red-700">{(mcResult.belowZeroProbability * 100).toFixed(2)}%</div>
                 </div>
               </div>
-              {mcChartData.length > 0 && (
-                <div className="mt-4 h-64">
+              {mcResult && (
+                <div className="mt-4 flex items-center gap-3 text-sm text-gray-700">
+                  <div className="font-semibold">분포 연도</div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={years}
+                    value={mcHistogramYear}
+                    onChange={(e) => setMcHistogramYear(Number(e.target.value))}
+                    className="w-48"
+                  />
+                  <div className="text-xs text-gray-500">{mcHistogramYear}년 후</div>
+                </div>
+              )}
+              {mcHistogramData.length > 0 && (
+                <div className="mt-3 h-64">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={mcChartData} margin={{ top: 10, right: 20, left: 0, bottom: 40 }}>
+                    <BarChart data={mcHistogramData} margin={{ top: 10, right: 20, left: 0, bottom: 40 }}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis
                         dataKey="label"
@@ -1459,14 +1485,12 @@ ${chartDataWithMonteCarlo.map((data, idx) => {
                   </ResponsiveContainer>
                 </div>
               )}
-              {mcChartData.length > 0 && (
+              {mcHistogramData.length > 0 && (
                 <div className="mt-2 text-xs text-gray-500 leading-relaxed">
-                  이 히스토그램은 “최종 순자산(집 포함, 대출 차감)”의 분포입니다. 극단적으로 낮은 값(왼쪽 꼬리)은
-                  은퇴 후 인출 구간에 하락장이 겹치거나, 결혼/주택 이벤트 직후 하락장이 겹쳐 현금흐름이 불리해지는
-                  일부 시나리오(꼬리 경로)에서 발생할 수 있습니다.
+                  선택 연도({mcHistogramYear}년 후)의 “금융 자산(집 제외)” 분포입니다. 대출/다운페이/인출 이벤트와 시장 하락이 겹칠 때 왼쪽 꼬리가 두꺼워질 수 있습니다.
                 </div>
               )}
-              {mcChartData.length === 0 && (
+              {mcHistogramData.length === 0 && (
                 <div className="mt-3 text-sm text-gray-500">시뮬레이션을 실행하면 분포 차트가 표시됩니다.</div>
               )}
             </>
@@ -1634,6 +1658,50 @@ ${chartDataWithMonteCarlo.map((data, idx) => {
                     </ComposedChart>
                   </ResponsiveContainer>
                 </div>
+                <div className="mt-4 flex items-center gap-3 text-sm text-gray-700">
+                  <div className="font-semibold">분포 연도</div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={years}
+                    value={portfolioMcYear}
+                    onChange={(e) => setPortfolioMcYear(Number(e.target.value))}
+                    className="w-48"
+                  />
+                  <div className="text-xs text-gray-500">{portfolioMcYear}년 후</div>
+                </div>
+                {portfolioMcHistogramData.length > 0 && (
+                  <div className="mt-3 h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={portfolioMcHistogramData} margin={{ top: 10, right: 20, left: 0, bottom: 40 }}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis
+                          dataKey="label"
+                          angle={-45}
+                          textAnchor="end"
+                          interval={0}
+                          height={60}
+                          tick={{ fontSize: 10 }}
+                        />
+                        <YAxis tick={{ fontSize: 10 }} />
+                        <Tooltip
+                          formatter={(v) => {
+                            const count = Number(v) || 0;
+                            const pct = portfolioMcHistogramTotal > 0 ? (count / portfolioMcHistogramTotal) * 100 : 0;
+                            return [`${count}회 (${pct.toFixed(2)}%)`, '빈도'];
+                          }}
+                          labelFormatter={(l) => `구간: ${l}`}
+                        />
+                        <Bar dataKey="count" fill="#a855f7" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+                {portfolioMcHistogramData.length > 0 && (
+                  <div className="mt-2 text-xs text-gray-500 leading-relaxed">
+                    선택 연도({portfolioMcYear}년 후)의 포트폴리오 MC 금융자산 분포입니다.
+                  </div>
+                )}
                 <p className="mt-2 text-xs text-gray-500 leading-relaxed">
                   • 포트폴리오 변동성만 반영한 적립 시뮬레이션으로, 결혼/주택/대출/은퇴/배우자/인출 이벤트는 포함되지 않습니다.
                   <br />

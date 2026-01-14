@@ -1,6 +1,7 @@
+import { useMemo, useState } from 'react';
 import { useSimulator } from '../../contexts/SimulatorContext';
 import { StatCard, WealthChart } from '../index';
-import { ResponsiveContainer, ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+import { ResponsiveContainer, ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, BarChart, Bar } from 'recharts';
 
 const ResultsView = () => {
   const {
@@ -40,7 +41,47 @@ const ResultsView = () => {
     setPortfolioMcChartHeight,
     // S&P500 Monte Carlo  
     mcResult,
+    // Asset Tracking
+    assetRecords,
+    showActualAssets,
+    setShowActualAssets,
   } = useSimulator();
+  const [mcYear, setMcYear] = useState(years);
+  const [portfolioMcYear, setPortfolioMcYear] = useState(years);
+
+  const buildHistogram = (samples = [], bins = 18) => {
+    if (!samples?.length) return [];
+    const positive = samples.filter((v) => Number.isFinite(v) && v > 0).sort((a, b) => a - b);
+    if (!positive.length) return [];
+    const min = positive[0];
+    const max = positive[positive.length - 1];
+    if (!Number.isFinite(min) || !Number.isFinite(max) || min <= 0) return [];
+    const logMin = Math.log10(min);
+    const logMax = Math.log10(max);
+    const logWidth = logMax === logMin ? 1 : (logMax - logMin) / bins;
+    const hist = new Array(bins).fill(0);
+    positive.forEach((v) => {
+      const idx = logMax === logMin ? 0 : Math.min(bins - 1, Math.floor((Math.log10(v) - logMin) / logWidth));
+      hist[idx] += 1;
+    });
+    return hist.map((count, i) => {
+      const start = Math.pow(10, logMin + i * logWidth);
+      const end = Math.pow(10, logMin + (i + 1) * logWidth);
+      return { label: `${(start / 10000).toFixed(1)}~${(end / 10000).toFixed(1)}억`, count };
+    });
+  };
+
+  const mcHistogramData = useMemo(() => buildHistogram(mcResult?.samplesByYear?.[mcYear]), [mcResult, mcYear]);
+  const mcHistogramTotal = useMemo(() => mcHistogramData.reduce((s, d) => s + (d.count || 0), 0), [mcHistogramData]);
+
+  const portfolioMcHistogramData = useMemo(
+    () => buildHistogram(portfolioMcResult?.samplesByYear?.[portfolioMcYear]),
+    [portfolioMcResult, portfolioMcYear]
+  );
+  const portfolioMcHistogramTotal = useMemo(
+    () => portfolioMcHistogramData.reduce((s, d) => s + (d.count || 0), 0),
+    [portfolioMcHistogramData]
+  );
 
   const startWealthChartResize = (e) => {
     e.preventDefault();
@@ -204,6 +245,9 @@ const ResultsView = () => {
           monteCarloEnabled={hasMonteCarloBand && showMCBands}
           height={wealthChartHeight}
           showNoMarriageComparison={false}
+          showActualAssets={showActualAssets}
+          onToggleActualAssets={setShowActualAssets}
+          hasActualAssetData={assetRecords && assetRecords.length > 0}
         />
 
         {/* Resize Handle */}
@@ -262,6 +306,38 @@ const ResultsView = () => {
                 <strong>시뮬레이션 횟수:</strong> {mcResult.iterations}회 · 
                 <strong> 평균:</strong> {(mcResult.mean / 10000).toFixed(2)}억
               </div>
+              <div className="mt-3 flex items-center gap-3 text-sm text-gray-700">
+                <div className="font-semibold">분포 연도</div>
+                <input
+                  type="range"
+                  min={0}
+                  max={years}
+                  value={mcYear}
+                  onChange={(e) => setMcYear(Number(e.target.value))}
+                  className="w-48"
+                />
+                <div className="text-xs text-gray-500">{mcYear}년 후</div>
+              </div>
+              {mcHistogramData.length > 0 && (
+                <div className="mt-3 h-56 bg-white/60 rounded-lg p-2">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={mcHistogramData} margin={{ top: 10, right: 10, left: 0, bottom: 40 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis dataKey="label" angle={-45} textAnchor="end" interval={0} height={60} tick={{ fontSize: 10 }} />
+                      <YAxis tick={{ fontSize: 10 }} />
+                      <Tooltip
+                        formatter={(v) => {
+                          const count = Number(v) || 0;
+                          const pct = mcHistogramTotal > 0 ? (count / mcHistogramTotal) * 100 : 0;
+                          return [`${count}회 (${pct.toFixed(2)}%)`, '빈도'];
+                        }}
+                        labelFormatter={(l) => `구간: ${l}`}
+                      />
+                      <Bar dataKey="count" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
             </div>
           )}
 
@@ -305,10 +381,42 @@ const ResultsView = () => {
                 </div>
               </div>
               
-              <div className="text-xs text-purple-600 bg-purple-100/50 p-2 rounded mb-4">
-                <strong>시뮬레이션:</strong> {portfolioMcResult.numSimulations}회 · 
-                <strong> 표준편차:</strong> σ {portfolioStdDev.toFixed(1)}%
-              </div>
+                <div className="text-xs text-purple-600 bg-purple-100/50 p-2 rounded mb-4">
+                  <strong>시뮬레이션:</strong> {portfolioMcResult.numSimulations}회 · 
+                  <strong> 표준편차:</strong> σ {portfolioStdDev.toFixed(1)}%
+                </div>
+                <div className="mt-3 flex items-center gap-3 text-sm text-gray-700">
+                  <div className="font-semibold">분포 연도</div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={years}
+                    value={portfolioMcYear}
+                    onChange={(e) => setPortfolioMcYear(Number(e.target.value))}
+                    className="w-48"
+                  />
+                  <div className="text-xs text-gray-500">{portfolioMcYear}년 후</div>
+                </div>
+                {portfolioMcHistogramData.length > 0 && (
+                  <div className="mt-3 h-56 bg-white/60 rounded-lg p-2">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={portfolioMcHistogramData} margin={{ top: 10, right: 10, left: 0, bottom: 40 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis dataKey="label" angle={-45} textAnchor="end" interval={0} height={60} tick={{ fontSize: 10 }} />
+                        <YAxis tick={{ fontSize: 10 }} />
+                        <Tooltip
+                          formatter={(v) => {
+                            const count = Number(v) || 0;
+                            const pct = portfolioMcHistogramTotal > 0 ? (count / portfolioMcHistogramTotal) * 100 : 0;
+                            return [`${count}회 (${pct.toFixed(2)}%)`, '빈도'];
+                          }}
+                          labelFormatter={(l) => `구간: ${l}`}
+                        />
+                        <Bar dataKey="count" fill="#a855f7" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
 
               {/* Portfolio MC Chart */}
               {portfolioMcChartData.length > 0 && (

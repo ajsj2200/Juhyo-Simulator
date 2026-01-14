@@ -173,6 +173,9 @@ const WealthChart = ({
   monteCarloEnabled = false,
   height = 480,
   showNoMarriageComparison = true,
+  showActualAssets = false,
+  onToggleActualAssets,
+  hasActualAssetData = false,
 }) => {
   const effectiveRetireYear =
     marriagePlan.enabled && retirementPlan.enabled
@@ -360,6 +363,19 @@ const WealthChart = ({
               }`}
             >
               Y축: {useLogScale ? '로그' : '선형'} {useCompound === false ? '(단리 비교)' : ''}
+            </button>
+          )}
+          {hasActualAssetData && onToggleActualAssets && (
+            <button
+              type="button"
+              onClick={() => onToggleActualAssets(!showActualAssets)}
+              className={`text-xs px-3 py-1.5 rounded border transition-colors ${
+                showActualAssets
+                  ? 'bg-orange-50 border-orange-200 text-orange-700'
+                  : 'bg-gray-50 border-gray-200 text-gray-700'
+              }`}
+            >
+              📊 {showActualAssets ? '실제 기록 표시' : '실제 기록 숨김'}
             </button>
           )}
         </div>
@@ -697,6 +713,20 @@ const WealthChart = ({
               name="배우자 자산(단독)"
               dot={{ r: 2.5, strokeWidth: 1.5, stroke: '#fff' }}
               activeDot={{ r: 5, stroke: '#fff', strokeWidth: 2 }}
+            />
+          )}
+          {/* 실제 자산 기록 */}
+          {showActualAssets && hasActualAssetData && (
+            <Line
+              type="monotone"
+              dataKey="actualAsset"
+              stroke="#f97316"
+              strokeWidth={3}
+              strokeDasharray="8 4"
+              name="📊 실제 기록"
+              dot={{ r: 5, fill: '#f97316', stroke: '#fff', strokeWidth: 2 }}
+              activeDot={{ r: 8, fill: '#ea580c', stroke: '#fff', strokeWidth: 2 }}
+              connectNulls={false}
             />
           )}
         </ComposedChart>

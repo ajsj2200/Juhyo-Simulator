@@ -2,7 +2,7 @@ import { useSimulator } from '../../contexts/SimulatorContext';
 import { RetirementPlanSection } from '../index';
 
 const RetirementView = () => {
-  const { retirementPlan, setRetirementPlan, you, years } = useSimulator();
+  const { retirementPlan, setRetirementPlan, you, years, marriagePlan, retireYearAsset } = useSimulator();
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -15,7 +15,9 @@ const RetirementView = () => {
         retirementPlan={retirementPlan}
         setRetirementPlan={setRetirementPlan}
         you={you}
+        marriagePlan={marriagePlan}
         years={years}
+        retireYearAsset={retireYearAsset}
       />
     </div>
   );

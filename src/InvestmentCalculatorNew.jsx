@@ -12,6 +12,7 @@ import {
   CrisisView,
   LoanView,
   PresetsView,
+  AssetTrackingView,
 } from './components/views';
 
 const ViewRouter = () => {
@@ -29,6 +30,7 @@ const ViewRouter = () => {
     crisis: CrisisView,
     loan: LoanView,
     presets: PresetsView,
+    assetTracking: AssetTrackingView,
   };
 
   const ViewComponent = views[activeView] || DashboardView;

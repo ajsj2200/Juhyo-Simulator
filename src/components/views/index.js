@@ -9,3 +9,4 @@ export { default as MonteCarloView } from './MonteCarloView';
 export { default as CrisisView } from './CrisisView';
 export { default as LoanView } from './LoanView';
 export { default as PresetsView } from './PresetsView';
+export { default as AssetTrackingView } from './AssetTrackingView';

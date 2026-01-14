@@ -93,6 +93,10 @@ export const SimulatorProvider = ({ children }) => {
   const [useHistoricalReturns, setUseHistoricalReturns] = useState(false);
   const [historicalStartYear, setHistoricalStartYear] = useState(1975);
 
+  // Asset Tracking (자산 추적)
+  const [assetRecords, setAssetRecords] = useState([]);
+  const [showActualAssets, setShowActualAssets] = useState(true);
+
   // Loan Calculator
   const [loanCalc, setLoanCalc] = useState({
     amount: DEFAULT_MARRIAGE_PLAN.loanAmount,
@@ -110,6 +114,27 @@ export const SimulatorProvider = ({ children }) => {
 
   // Active View (for navigation)
   const [activeView, setActiveView] = useState('dashboard');
+
+  // Load asset records from localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('voo-app-asset-records');
+      if (saved) {
+        setAssetRecords(JSON.parse(saved));
+      }
+    } catch (e) {
+      console.error('Failed to load asset records:', e);
+    }
+  }, []);
+
+  // Save asset records to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('voo-app-asset-records', JSON.stringify(assetRecords));
+    } catch (e) {
+      console.error('Failed to save asset records:', e);
+    }
+  }, [assetRecords]);
 
   // Load presets from localStorage
   useEffect(() => {
@@ -518,6 +543,26 @@ export const SimulatorProvider = ({ children }) => {
       : mcResult?.percentilesByYear;
     if (!percentiles) return chartData;
 
+    // 실제 자산 추적 데이터를 연차(year)로 매핑
+    const actualAssetMap = new Map();
+    if (assetRecords && assetRecords.length > 0) {
+      const now = new Date();
+      const startYear = now.getFullYear();
+      assetRecords.forEach(record => {
+        // YYYY-MM-DD 또는 YYYY-MM 형식 처리
+        const recordDate = record.date.length === 7 
+          ? new Date(record.date + '-01') 
+          : new Date(record.date);
+        // 연차 계산: (기록 날짜 - 현재) / 365
+        const yearsSinceStart = (recordDate.getFullYear() - startYear) + (recordDate.getMonth() / 12);
+        const roundedYear = Math.round(yearsSinceStart * 2) / 2; // 0.5년 단위로 반올림
+        // 만원 단위에서 억 단위로 변환
+        const assetInEok = (record.assetValue || 0) / 10000;
+        // 같은 연차에 여러 기록이 있으면 마지막 값 사용
+        actualAssetMap.set(roundedYear, assetInEok);
+      });
+    }
+
     return chartData.map((d, i) => ({
       ...d,
       mc_p10: percentiles.p10?.[i] != null ? percentiles.p10[i] / 10000 : null,
@@ -526,8 +571,10 @@ export const SimulatorProvider = ({ children }) => {
       mc_p75: percentiles.p75?.[i] != null ? percentiles.p75[i] / 10000 : null,
       mc_p90: percentiles.p90?.[i] != null ? percentiles.p90[i] / 10000 : null,
       mc_mean: percentiles.mean?.[i] != null ? percentiles.mean[i] / 10000 : null,
+      // 실제 자산 값 (해당 연차에 기록이 있으면 표시)
+      actualAsset: actualAssetMap.get(i) ?? null,
     }));
-  }, [chartData, mcResult, useHouseInChart]);
+  }, [chartData, mcResult, useHouseInChart, assetRecords]);
 
   const hasMonteCarloBand = useMemo(() => {
     return chartDataWithMonteCarlo.some(
@@ -569,12 +616,55 @@ export const SimulatorProvider = ({ children }) => {
   const difference = finalYou - finalOther;
   const marriageDifference = finalYou - finalYouNoMarriage;
 
-  const effectiveRetireYear = marriagePlan.enabled
-    ? Math.max(you.retireYear, marriagePlan.spouse.retireYear)
-    : you.retireYear;
+  const youRetireYear = Number.isFinite(Number(you?.retireYear)) ? Number(you.retireYear) : 0;
+  const spouseRetireYear = Number.isFinite(Number(marriagePlan?.spouse?.retireYear))
+    ? Number(marriagePlan.spouse.retireYear)
+    : 0;
 
-  const retireYearAsset =
-    retirementPlan.enabled && effectiveRetireYear <= years ? chartData[effectiveRetireYear]?.you || 0 : 0;
+  const effectiveRetireYear = marriagePlan.enabled
+    ? Math.max(youRetireYear, spouseRetireYear)
+    : youRetireYear;
+
+  const retireYearAsset = useMemo(() => {
+    if (!retirementPlan.enabled) return 0;
+    if (!Number.isFinite(effectiveRetireYear) || effectiveRetireYear < 0) return 0;
+    // 차트 범위 내면 그대로 사용
+    if (effectiveRetireYear <= years) {
+      return chartData[effectiveRetireYear]?.you || 0;
+    }
+    // 차트 범위 밖이면 동일 엔진으로 추가 계산
+    if (useHistoricalReturns && historicalReturns.length > 0) {
+      const res = calculateWealthWithMarriageHistorical(
+        you,
+        effectiveRetireYear,
+        marriagePlan,
+        retirementPlan,
+        historicalReturns,
+        true
+      );
+      return (res?.wealth ?? 0) / 10000;
+    }
+    const res = calculateWealthWithMarriage(
+      you,
+      effectiveRetireYear,
+      marriagePlan,
+      retirementPlan,
+      crisis,
+      true
+    );
+    return res / 10000;
+  }, [
+    retirementPlan.enabled,
+    effectiveRetireYear,
+    years,
+    chartData,
+    useHistoricalReturns,
+    historicalReturns,
+    you,
+    marriagePlan,
+    retirementPlan,
+    crisis,
+  ]);
 
   // Find crossover year
   const crossoverYear = useMemo(() => {
@@ -835,6 +925,18 @@ export const SimulatorProvider = ({ children }) => {
     const diffs = [];
     const orig = active.data;
 
+    const formatAdjustments = (adjustments) => {
+      const arr = Array.isArray(adjustments) ? adjustments : [];
+      if (arr.length === 0) return '없음';
+      return arr
+        .map((a) => {
+          const y = Number(a?.year);
+          const m = Number(a?.monthly);
+          return `[${Number.isFinite(y) ? y : '-'}년차: ${Number.isFinite(m) ? m : '-'}만]`;
+        })
+        .join(', ');
+    };
+
     const addDiff = (field, oldVal, newVal, unit = '') => {
       if (oldVal !== newVal) {
         diffs.push({ field, old: oldVal, new: newVal, unit });
@@ -848,10 +950,26 @@ export const SimulatorProvider = ({ children }) => {
     addDiff('본인 월 투자액', orig.you.monthly, you.monthly, '만원');
     addDiff('본인 수익률', orig.you.rate, you.rate, '%');
     addDiff('본인 초기자산', orig.you.initial, you.initial, '만원');
+    if (JSON.stringify(orig.you?.adjustments || []) !== JSON.stringify(you?.adjustments || [])) {
+      diffs.push({
+        field: '본인 투자 변경 스케줄',
+        old: formatAdjustments(orig.you?.adjustments),
+        new: formatAdjustments(you?.adjustments),
+        unit: '',
+      });
+    }
 
     // 상대방 정보
     addDiff('상대방 월 투자액(기본)', orig.other.monthly, other.monthly, '만원');
     addDiff('상대방 수익률(기본)', orig.other.rate, other.rate, '%');
+    if (JSON.stringify(orig.other?.adjustments || []) !== JSON.stringify(other?.adjustments || [])) {
+      diffs.push({
+        field: '상대방 투자 변경 스케줄',
+        old: formatAdjustments(orig.other?.adjustments),
+        new: formatAdjustments(other?.adjustments),
+        unit: '',
+      });
+    }
 
     // 결혼/주택
     if (orig.marriagePlan.enabled !== marriagePlan.enabled) {
@@ -867,8 +985,13 @@ export const SimulatorProvider = ({ children }) => {
     addDiff('배우자 수익률(결혼)', orig.marriagePlan.spouse?.rate, marriagePlan.spouse?.rate, '%');
     addDiff('배우자 초기자산(결혼)', orig.marriagePlan.spouse?.initial, marriagePlan.spouse?.initial, '만원');
 
-    if (JSON.stringify(orig.marriagePlan.spouse?.adjustments) !== JSON.stringify(marriagePlan.spouse?.adjustments)) {
-      diffs.push({ field: '배우자 투자 변경 스케줄', old: '기존', new: '변경' });
+    if (JSON.stringify(orig.marriagePlan.spouse?.adjustments || []) !== JSON.stringify(marriagePlan.spouse?.adjustments || [])) {
+      diffs.push({
+        field: '배우자 투자 변경 스케줄',
+        old: formatAdjustments(orig.marriagePlan.spouse?.adjustments),
+        new: formatAdjustments(marriagePlan.spouse?.adjustments),
+        unit: '',
+      });
     }
     
     addDiff('집 가격', orig.marriagePlan.housePrice, marriagePlan.housePrice, '만원');
@@ -1039,6 +1162,12 @@ export const SimulatorProvider = ({ children }) => {
     effectiveRetireYear,
     youSavingsRate,
     otherSavingsRate,
+
+    // Asset Tracking
+    assetRecords,
+    setAssetRecords,
+    showActualAssets,
+    setShowActualAssets,
 
     // Constants for reference
     SP500_STATS,

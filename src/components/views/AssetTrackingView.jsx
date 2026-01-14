@@ -207,6 +207,17 @@ const AssetTrackingView = () => {
         </div>
       </section>
 
+      {/* 스노우볼 애니메이션 */}
+      {recordsWithReturns.length > 0 && (
+        <section>
+          <h2 className="text-heading-2 mb-3">❄️ 자산 성장 스노우볼</h2>
+          <SnowballAnimation 
+            records={recordsWithReturns} 
+            stats={stats}
+          />
+        </section>
+      )}
+
       {/* 차트 */}
       {chartData.length > 0 && (
         <Card>

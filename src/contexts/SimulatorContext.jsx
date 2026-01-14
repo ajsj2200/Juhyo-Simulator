@@ -840,12 +840,15 @@ export const SimulatorProvider = ({ children }) => {
   const handleConfirmLoadPreset = useCallback((preset) => {
     if (!preset?.data) return;
     const cloned = JSON.parse(JSON.stringify(preset.data));
-    setYou(cloned.you);
-    setOther(cloned.other);
-    setYears(cloned.years);
-    setMarriagePlan(cloned.marriagePlan);
-    setRetirementPlan(cloned.retirementPlan);
-    setCrisis(cloned.crisis);
+    
+    // 개별 상태 로드 (오래된 데이터 대응을 위해 기존 값 or 기본값 fallback)
+    if (cloned.you) setYou(cloned.you);
+    if (cloned.other) setOther(cloned.other);
+    if (cloned.years !== undefined) setYears(cloned.years);
+    if (cloned.marriagePlan) setMarriagePlan(cloned.marriagePlan);
+    if (cloned.retirementPlan) setRetirementPlan(cloned.retirementPlan);
+    if (cloned.crisis) setCrisis(cloned.crisis);
+    
     // 포트폴리오 로드 (기존 프리셋 호환성 유지)
     if (cloned.portfolio) {
       setPortfolio(cloned.portfolio);
@@ -854,10 +857,12 @@ export const SimulatorProvider = ({ children }) => {
     if (cloned.loanCalc) {
       setLoanCalc(cloned.loanCalc);
     }
-    setOtherUseCompound(cloned.otherUseCompound ?? true);
-    setUseLogScale(cloned.useLogScale ?? true);
-    setUseRealAsset(cloned.useRealAsset ?? false);
-    setUseHouseInChart(cloned.useHouseInChart ?? true);
+    
+    if (cloned.otherUseCompound !== undefined) setOtherUseCompound(cloned.otherUseCompound);
+    if (cloned.useLogScale !== undefined) setUseLogScale(cloned.useLogScale);
+    if (cloned.useRealAsset !== undefined) setUseRealAsset(cloned.useRealAsset);
+    if (cloned.useHouseInChart !== undefined) setUseHouseInChart(cloned.useHouseInChart);
+    
     // 히스토리컬 모드 로드
     if (cloned.useHistoricalReturns !== undefined) {
       setUseHistoricalReturns(cloned.useHistoricalReturns);
@@ -1001,28 +1006,28 @@ export const SimulatorProvider = ({ children }) => {
     Object.keys(ASSET_INFO).forEach(key => {
       const name = ASSET_INFO[key].name;
       if (portfolio.useAmountMode) {
-        addDiff(`${name} 투자금`, orig.portfolio.monthlyAmounts?.[key] || 0, portfolio.monthlyAmounts?.[key] || 0, '만원');
+        addDiff(`${name} 투자금`, orig.portfolio?.monthlyAmounts?.[key] || 0, portfolio.monthlyAmounts?.[key] || 0, '만원');
       } else {
-        addDiff(`${name} 비중`, orig.portfolio.allocations?.[key] || 0, portfolio.allocations?.[key] || 0, '%');
+        addDiff(`${name} 비중`, orig.portfolio?.allocations?.[key] || 0, portfolio.allocations?.[key] || 0, '%');
       }
     });
 
     // 커스텀 주식
-    const origCustoms = orig.portfolio.customStocks || [];
+    const origCustoms = orig.portfolio?.customStocks || [];
     const currCustoms = portfolio.customStocks || [];
     
     // 추가되거나 변경된 종목
     currCustoms.forEach(curr => {
-      const orig = origCustoms.find(o => o.ticker === curr.ticker);
-      if (!orig) {
+      const oCustom = origCustoms.find(o => o.ticker === curr.ticker);
+      if (!oCustom) {
         diffs.push({ field: `${curr.ticker} 추가`, old: '-', new: portfolio.useAmountMode ? `${curr.monthlyAmount}만원` : `${curr.allocation}%` });
       } else {
         if (portfolio.useAmountMode) {
-          addDiff(`${curr.ticker} 투자금`, orig.monthlyAmount || 0, curr.monthlyAmount || 0, '만원');
+          addDiff(`${curr.ticker} 투자금`, oCustom.monthlyAmount || 0, curr.monthlyAmount || 0, '만원');
         } else {
-          addDiff(`${curr.ticker} 비중`, orig.allocation || 0, curr.allocation || 0, '%');
+          addDiff(`${curr.ticker} 비중`, oCustom.allocation || 0, curr.allocation || 0, '%');
         }
-        addDiff(`${curr.ticker} 수익률`, orig.expectedReturn || 0, curr.expectedReturn || 0, '%');
+        addDiff(`${curr.ticker} 수익률`, oCustom.expectedReturn || 0, curr.expectedReturn || 0, '%');
       }
     });
 
@@ -1033,16 +1038,16 @@ export const SimulatorProvider = ({ children }) => {
       }
     });
     // 은퇴 계획
-    if (orig.retirementPlan.enabled !== retirementPlan.enabled) {
-      addDiff('은퇴 계산 활성화', orig.retirementPlan.enabled ? 'O' : 'X', retirementPlan.enabled ? 'O' : 'X');
+    if (orig.retirementPlan?.enabled !== retirementPlan.enabled) {
+      addDiff('은퇴 계산 활성화', orig.retirementPlan?.enabled ? 'O' : 'X', retirementPlan.enabled ? 'O' : 'X');
     }
-    addDiff('은퇴 후 생활비', orig.retirementPlan.monthlyExpense, retirementPlan.monthlyExpense, '만원');
+    addDiff('은퇴 후 생활비', orig.retirementPlan?.monthlyExpense, retirementPlan.monthlyExpense, '만원');
 
     // 위기 시나리오
-    if (orig.crisis.enabled !== crisis.enabled) {
-      addDiff('위기 시나리오 활성화', orig.crisis.enabled ? 'O' : 'X', crisis.enabled ? 'O' : 'X');
+    if (orig.crisis?.enabled !== crisis.enabled) {
+      addDiff('위기 시나리오 활성화', orig.crisis?.enabled ? 'O' : 'X', crisis.enabled ? 'O' : 'X');
     }
-    addDiff('위기 발생 시점', orig.crisis.startYear, crisis.startYear, '년차');
+    addDiff('위기 발생 시점', orig.crisis?.startYear, crisis.startYear, '년차');
 
     return diffs;
   }, [

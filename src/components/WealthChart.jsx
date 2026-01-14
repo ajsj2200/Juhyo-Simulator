@@ -1,3 +1,4 @@
+import { useState, useCallback } from 'react';
 import {
   ComposedChart,
   Line,
@@ -10,6 +11,7 @@ import {
   ResponsiveContainer,
   ReferenceLine,
   ReferenceArea,
+  Brush,
 } from 'recharts';
 
 const formatValue = (value) => {
@@ -177,6 +179,42 @@ const WealthChart = ({
   onToggleActualAssets,
   hasActualAssetData = false,
 }) => {
+  // 줌 상태 관리
+  // left/right는 데이터의 key(여기서는 index)
+  const [refAreaLeft, setRefAreaLeft] = useState('');
+  const [refAreaRight, setRefAreaRight] = useState('');
+  const [left, setLeft] = useState('dataMin');
+  const [right, setRight] = useState('dataMax');
+
+  const onMouseDown = (e) => (e && e.activeLabel && setRefAreaLeft(e.activeLabel));
+  const onMouseMove = (e) => (e && refAreaLeft && setRefAreaRight(e.activeLabel));
+
+  const zoom = useCallback(() => {
+    let _left = refAreaLeft;
+    let _right = refAreaRight;
+
+    if (_left === _right || _right === '') {
+      setRefAreaLeft('');
+      setRefAreaRight('');
+      return;
+    }
+
+    // 좌우 순서 정렬
+    if (_left > _right) [_left, _right] = [_right, _left];
+
+    setLeft(_left);
+    setRight(_right);
+    setRefAreaLeft('');
+    setRefAreaRight('');
+  }, [refAreaLeft, refAreaRight]);
+
+  const zoomOut = useCallback(() => {
+    setLeft('dataMin');
+    setRight('dataMax');
+    setRefAreaLeft('');
+    setRefAreaRight('');
+  }, []);
+
   const effectiveRetireYear =
     marriagePlan.enabled && retirementPlan.enabled
       ? Math.max(personRetireYear, spouseRetireYear)
@@ -378,10 +416,25 @@ const WealthChart = ({
               📊 {showActualAssets ? '실제 기록 표시' : '실제 기록 숨김'}
             </button>
           )}
+          {(left !== 'dataMin' || right !== 'dataMax') && (
+            <button
+              type="button"
+              onClick={zoomOut}
+              className="text-xs px-3 py-1.5 rounded border bg-blue-50 border-blue-200 text-blue-700 font-bold hover:bg-blue-100 transition-colors shadow-sm"
+            >
+              🔍 줌 리셋
+            </button>
+          )}
         </div>
       </div>
       <ResponsiveContainer width="100%" height={height}>
-        <ComposedChart data={sanitizedData} margin={{ top: 20, right: 30, left: 0, bottom: 10 }}>
+        <ComposedChart 
+          data={sanitizedData} 
+          margin={{ top: 20, right: 30, left: 0, bottom: 10 }}
+          onMouseDown={onMouseDown}
+          onMouseMove={onMouseMove}
+          onMouseUp={zoom}
+        >
           <defs>
             <linearGradient id="youGradient" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.28} />
@@ -418,10 +471,11 @@ const WealthChart = ({
           <XAxis
             dataKey="year"
             type="number"
-            domain={[0, xMax]}
+            domain={[left, right]}
             tick={{ fill: '#6b7280', fontSize: 12 }}
             tickLine={false}
             axisLine={{ stroke: '#e5e7eb' }}
+            tickFormatter={(val) => (val % 5 === 0 ? `${val}년` : '')}
             label={{ value: '년', position: 'insideBottomRight', offset: -5, fill: '#6b7280' }}
           />
           <YAxis
@@ -447,6 +501,16 @@ const WealthChart = ({
             }
             wrapperStyle={{ paddingTop: 20 }}
           />
+
+          {refAreaLeft && refAreaRight ? (
+            <ReferenceArea
+              x1={refAreaLeft}
+              x2={refAreaRight}
+              strokeOpacity={0.3}
+              fill="#3b82f6"
+              fillOpacity={0.15}
+            />
+          ) : null}
 
           {/* 은퇴 이후 구간 강조 */}
           {retirementPlan.enabled &&
@@ -718,14 +782,37 @@ const WealthChart = ({
           {/* 실제 자산 기록 */}
           {showActualAssets && hasActualAssetData && (
             <Line
-              type="monotone"
+              type="linear"
               dataKey="actualAsset"
-              stroke="#f97316"
-              strokeWidth={3}
-              strokeDasharray="8 4"
+              stroke="#ea580c"
+              strokeWidth={4}
               name="📊 실제 기록"
-              dot={{ r: 5, fill: '#f97316', stroke: '#fff', strokeWidth: 2 }}
-              activeDot={{ r: 8, fill: '#ea580c', stroke: '#fff', strokeWidth: 2 }}
+              dot={(props) => {
+                const { cx, cy, value } = props;
+                if (value == null || !Number.isFinite(cx) || !Number.isFinite(cy)) return null;
+                return (
+                  <g>
+                    {/* 외곽 글로우 */}
+                    <circle cx={cx} cy={cy} r={14} fill="#f97316" opacity={0.25} />
+                    <circle cx={cx} cy={cy} r={10} fill="#f97316" opacity={0.4} />
+                    {/* 메인 점 */}
+                    <circle cx={cx} cy={cy} r={7} fill="#ea580c" stroke="#fff" strokeWidth={3} />
+                    {/* 라벨 */}
+                    <text 
+                      x={cx} 
+                      y={cy - 18} 
+                      textAnchor="middle" 
+                      fill="#ea580c" 
+                      fontSize={11}
+                      fontWeight="bold"
+                      style={{ textShadow: '0 0 4px white, 0 0 4px white' }}
+                    >
+                      {value >= 1 ? `${value.toFixed(1)}억` : `${(value * 10000).toFixed(0)}만`}
+                    </text>
+                  </g>
+                );
+              }}
+              activeDot={{ r: 12, fill: '#c2410c', stroke: '#fff', strokeWidth: 3 }}
               connectNulls={false}
             />
           )}

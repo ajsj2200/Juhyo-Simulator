@@ -704,7 +704,7 @@ const PortfolioSection = ({ portfolio, setPortfolio }) => {
             </div>
             {monteCarloEnabled && (
               <>
-                <div className="pl-7 text-xs text-purple-600 bg-purple-50 p-2 rounded">
+                <div className="pl-7 text-xs text-purple-600 bg-purple-50 p-2 rounded mb-3">
                   500~20,000회 시뮬레이션으로 10~90% 확률 범위를 표시합니다.
                 </div>
                 <div className="pl-7 grid grid-cols-1 sm:grid-cols-2 gap-3">

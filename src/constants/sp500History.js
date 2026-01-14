@@ -101,8 +101,16 @@ export const SP500_ANNUAL_RETURNS = {
   2024: 24.88,
 };
 
+// 현대 금융 시스템 시작 연도 (금본위제 폐지 및 현대적 시장 형성 시기)
+export const SP500_MODERN_START_YEAR = 1970;
+
 // 수익률 배열 (연도 오름차순)
 export const SP500_RETURNS_ARRAY = Object.values(SP500_ANNUAL_RETURNS);
+
+// 현대 금융 시스템 이후 수익률 배열
+export const SP500_MODERN_RETURNS_ARRAY = Object.entries(SP500_ANNUAL_RETURNS)
+  .filter(([year]) => Number(year) >= SP500_MODERN_START_YEAR)
+  .map(([, value]) => value);
 
 // 수익률 연도 배열
 export const SP500_YEARS = Object.keys(SP500_ANNUAL_RETURNS).map(Number);

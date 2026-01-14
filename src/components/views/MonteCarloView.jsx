@@ -17,8 +17,11 @@ const MonteCarloView = () => {
     mcHistogramTotal,
     runMonteCarlo,
     SP500_STATS,
+    SP500_MODERN_START_YEAR,
     useHistoricalReturns,
     setUseHistoricalReturns,
+    portfolio,
+    setPortfolio,
   } = useSimulator();
 
   const [exclusiveModalOpen, setExclusiveModalOpen] = useState(false);
@@ -30,6 +33,9 @@ const MonteCarloView = () => {
     }
     runMonteCarlo();
   };
+
+  const isModern = portfolio.mcHistoricalRange === 'modern' || !portfolio.mcHistoricalRange;
+  const startYear = isModern ? SP500_MODERN_START_YEAR : SP500_STATS.startYear;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -43,10 +49,38 @@ const MonteCarloView = () => {
           <div>
             <h3 className="text-heading-3 mb-2">시뮬레이션 설정</h3>
             <p className="text-sm text-gray-600 mb-4">
-              {SP500_STATS.startYear}~{SP500_STATS.endYear} 연도별 수익률을 무작위 순서로 섞어 {years}년간
+              {startYear}~{SP500_STATS.endYear} 연도별 수익률을 무작위 순서로 섞어 {years}년간
               현재 시나리오(결혼/주택/은퇴 포함)를 시뮬레이션합니다.
               {mcAccumulateEnabled && mcResult ? ` (누적 총 ${mcResult.iterations}회)` : ''}
             </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-6 pb-2 border-b border-blue-100">
+            <div className="text-sm font-semibold text-gray-700">데이터 범위</div>
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="mcRange"
+                  value="modern"
+                  checked={isModern}
+                  onChange={() => setPortfolio({ ...portfolio, mcHistoricalRange: 'modern' })}
+                  className="w-4 h-4 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-sm text-gray-700">현대 금융 시스템 ({SP500_MODERN_START_YEAR}~)</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="mcRange"
+                  value="full"
+                  checked={portfolio.mcHistoricalRange === 'full'}
+                  onChange={() => setPortfolio({ ...portfolio, mcHistoricalRange: 'full' })}
+                  className="w-4 h-4 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-sm text-gray-700">전체 역사 ({SP500_STATS.startYear}~)</span>
+              </label>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -89,7 +123,7 @@ const MonteCarloView = () => {
           </div>
 
           <div className="mt-4 text-xs text-gray-600 space-y-1 bg-gray-50 p-3 rounded-lg">
-            <p>• <strong>샘플링:</strong> 매년 과거 수익률 목록에서 1개를 복원추출로 뽑아 {years}년 시퀀스를 만듭니다.</p>
+            <p>• <strong>샘플링:</strong> {startYear}~{SP500_STATS.endYear} 수익률 목록에서 1개를 복원추출로 뽑아 {years}년 시퀀스를 만듭니다.</p>
             <p>• <strong>적용:</strong> 결혼/주택/은퇴 이벤트를 월 단위로 동일 엔진에 적용합니다.</p>
             <p>• <strong>결과:</strong> 최종 순자산 분포와 연도별 분위수 밴드(p10/p25/p50/p75/p90)를 계산합니다.</p>
             <p>• <strong>Seed:</strong> 동일 시드/동일 입력이면 결과가 재현됩니다.</p>

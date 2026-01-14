@@ -10,6 +10,7 @@ import {
 import {
   SP500_ANNUAL_RETURNS,
   SP500_RETURNS_ARRAY,
+  SP500_MODERN_RETURNS_ARRAY,
   SP500_YEARS,
   SP500_STATS,
 } from '../constants/sp500History';
@@ -731,7 +732,10 @@ export const SimulatorProvider = ({ children }) => {
     }
 
     setMcOptions((prev) => ({ ...prev, seed }));
-    const returns = SP500_RETURNS_ARRAY;
+    
+    // 데이터 범위 선택 (portfolio 내부 설정 사용)
+    const returns = portfolio.mcHistoricalRange === 'full' ? SP500_RETURNS_ARRAY : SP500_MODERN_RETURNS_ARRAY;
+    
     const res = runMonteCarloPlan(you, years, marriagePlan, retirementPlan, returns, {
       iterations: totalIterations,
       seed,

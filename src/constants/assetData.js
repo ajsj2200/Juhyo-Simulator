@@ -137,6 +137,7 @@ export const DEFAULT_PORTFOLIO = {
   rebalanceFrequency: 12, // 월 단위 (12 = 연 1회)
   monteCarloEnabled: false,
   monteCarloSimulations: 500,
+  mcHistoricalRange: 'modern', // 'modern' | 'full'
 };
 
 // 사전 정의 포트폴리오 (프리셋)

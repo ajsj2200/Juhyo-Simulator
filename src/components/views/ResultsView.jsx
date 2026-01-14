@@ -45,6 +45,8 @@ const ResultsView = () => {
     assetRecords,
     showActualAssets,
     setShowActualAssets,
+    copyResults,
+    copied,
   } = useSimulator();
   const [mcYear, setMcYear] = useState(years);
   const [portfolioMcYear, setPortfolioMcYear] = useState(years);
@@ -128,6 +130,26 @@ const ResultsView = () => {
       <div>
         <h1 className="text-heading-1 mb-2">결과 및 차트</h1>
         <p className="text-body">{years}년 후 예상 자산과 성장 추이를 확인하세요.</p>
+        <div className="mt-4">
+          <button
+            onClick={copyResults}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center gap-2 ${
+              copied
+                ? 'bg-emerald-500 text-white shadow-emerald-100'
+                : 'bg-white text-indigo-600 border border-indigo-200 hover:bg-indigo-50 shadow-sm'
+            }`}
+          >
+            {copied ? (
+              <>
+                <span>✓</span> 복사 완료!
+              </>
+            ) : (
+              <>
+                <span>📋</span> 결과 복사하기
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Quick Stats */}

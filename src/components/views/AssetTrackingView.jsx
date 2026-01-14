@@ -38,6 +38,8 @@ const AssetTrackingView = () => {
   const [showProjection, setShowProjection] = useState(true);
   const [projectionMonths, setProjectionMonths] = useState(12);
   const [monthlyContribution, setMonthlyContribution] = useState(100);
+  const [useManualReturn, setUseManualReturn] = useState(false);
+  const [manualReturnRate, setManualReturnRate] = useState('');
 
   const fileInputRef = useRef(null);
 
@@ -45,7 +47,12 @@ const AssetTrackingView = () => {
   const recordsWithReturns = calculateMonthlyReturns(assetRecords);
   const stats = calculateStats(assetRecords);
   const projections = showProjection 
-    ? projectFutureWealth(assetRecords, projectionMonths, monthlyContribution)
+    ? projectFutureWealth(
+        assetRecords, 
+        projectionMonths, 
+        monthlyContribution, 
+        useManualReturn && manualReturnRate !== '' ? parseFloat(manualReturnRate) : null
+      )
     : [];
 
   // 차트 데이터
@@ -234,17 +241,56 @@ const AssetTrackingView = () => {
                 미래 예측
               </label>
               {showProjection && (
-                <>
-                  <input
-                    type="number"
-                    value={projectionMonths}
-                    onChange={(e) => setProjectionMonths(parseInt(e.target.value) || 12)}
-                    className="w-16 px-2 py-1 text-sm border border-gray-300 rounded"
-                    min={1}
-                    max={120}
-                  />
-                  <span className="text-sm text-gray-500">개월</span>
-                </>
+                <div className="flex flex-wrap items-center gap-4 bg-purple-50 p-3 rounded-xl border border-purple-100">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-purple-700">기간:</span>
+                    <input
+                      type="number"
+                      value={projectionMonths}
+                      onChange={(e) => setProjectionMonths(parseInt(e.target.value) || 12)}
+                      className="w-16 px-2 py-1 text-sm border-gray-300 rounded focus:ring-purple-500 focus:border-purple-500"
+                      min={1}
+                      max={120}
+                    />
+                    <span className="text-sm text-gray-500">개월</span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-purple-700">월 투자액:</span>
+                    <input
+                      type="number"
+                      value={monthlyContribution}
+                      onChange={(e) => setMonthlyContribution(parseInt(e.target.value) || 0)}
+                      className="w-20 px-2 py-1 text-sm border-gray-300 rounded focus:ring-purple-500 focus:border-purple-500"
+                      min={0}
+                    />
+                    <span className="text-sm text-gray-500">만원</span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={useManualReturn}
+                        onChange={(e) => setUseManualReturn(e.target.checked)}
+                        className="w-3.5 h-3.5 text-purple-600 rounded"
+                      />
+                      <span className="text-sm font-medium text-purple-700">수익률 설정:</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        value={useManualReturn ? manualReturnRate : stats.averageMonthlyReturn.toFixed(2)}
+                        disabled={!useManualReturn}
+                        onChange={(e) => setManualReturnRate(e.target.value)}
+                        className={`w-20 px-2 py-1 text-sm border-gray-300 rounded focus:ring-purple-500 focus:border-purple-500 ${!useManualReturn ? 'bg-gray-100 text-gray-400' : 'bg-white'}`}
+                        step="0.01"
+                        placeholder={stats.averageMonthlyReturn.toFixed(2)}
+                      />
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-400 font-bold">%</span>
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
           </div>
@@ -472,50 +518,6 @@ const AssetTrackingView = () => {
         )}
       </Card>
 
-      {/* 예측 설정 */}
-      {showProjection && assetRecords.length >= 2 && (
-        <Card>
-          <h3 className="text-heading-3 mb-4">🔮 미래 예측 설정</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div>
-              <label className="block text-xs text-gray-600 mb-1">예측 기간</label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  value={projectionMonths}
-                  onChange={(e) => setProjectionMonths(parseInt(e.target.value) || 12)}
-                  className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                  min={1}
-                  max={120}
-                />
-                <span className="text-sm text-gray-600">개월</span>
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs text-gray-600 mb-1">월 투자금 (예측용)</label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  value={monthlyContribution}
-                  onChange={(e) => setMonthlyContribution(parseInt(e.target.value) || 0)}
-                  className="w-24 px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                  min={0}
-                />
-                <span className="text-sm text-gray-600">만원</span>
-              </div>
-            </div>
-            <div className="col-span-2 bg-purple-50 p-3 rounded-lg">
-              <div className="text-xs text-purple-600 mb-1">예측 기준</div>
-              <div className="text-sm text-gray-700">
-                월평균 수익률 <strong>{formatPercent(stats.averageMonthlyReturn)}</strong>을 기준으로 
-                {projectionMonths}개월 후 예상 자산: <strong className="text-purple-700">
-                  {projections.length > 0 ? formatMoney(projections[projections.length - 1].assetValue) : '-'}
-                </strong>
-              </div>
-            </div>
-          </div>
-        </Card>
-      )}
     </div>
   );
 };

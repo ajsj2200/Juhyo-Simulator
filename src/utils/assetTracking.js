@@ -193,13 +193,14 @@ export const calculateStats = (records) => {
  * @param {Array} records - 자산 기록 배열
  * @param {number} futureMonths - 예측할 개월 수
  * @param {number} monthlyContribution - 월 투자금
+ * @param {number|null} manualReturnRate - 수동 설정 월 수익률 (%)
  * @returns {Array} - 예측 데이터
  */
-export const projectFutureWealth = (records, futureMonths = 12, monthlyContribution = 0) => {
+export const projectFutureWealth = (records, futureMonths = 12, monthlyContribution = 0, manualReturnRate = null) => {
   if (!records || records.length < 2) return [];
   
   const stats = calculateStats(records);
-  const monthlyReturnRate = stats.averageMonthlyReturn / 100;
+  const monthlyReturnRate = (manualReturnRate !== null ? manualReturnRate : stats.averageMonthlyReturn) / 100;
   
   const sorted = [...records].sort((a, b) => a.date.localeCompare(b.date));
   const lastRecord = sorted[sorted.length - 1];

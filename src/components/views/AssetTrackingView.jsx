@@ -21,6 +21,8 @@ import {
   readCSVFile,
   createRecord,
   getCurrentDate,
+  calculateTrendLine,
+  dateToYearFraction,
 } from '../../utils/assetTracking';
 
 const AssetTrackingView = () => {
@@ -46,27 +48,45 @@ const AssetTrackingView = () => {
   // 계산된 데이터
   const recordsWithReturns = calculateMonthlyReturns(assetRecords);
   const stats = calculateStats(assetRecords);
-  const projections = showProjection 
+  const projections = showProjection
     ? projectFutureWealth(
-        assetRecords, 
-        projectionMonths, 
-        monthlyContribution, 
+        assetRecords,
+        projectionMonths,
+        monthlyContribution,
         useManualReturn && manualReturnRate !== '' ? parseFloat(manualReturnRate) : null
       )
     : [];
 
-  // 차트 데이터
+  // 회귀 분석 계산
+  const { trendLine, regression, baseDate } = calculateTrendLine(assetRecords);
+
+  // 차트 데이터 - yearFraction을 X축으로 사용
   const chartData = [
-    ...recordsWithReturns.map(r => ({
-      date: r.date,
-      value: r.assetValue / 10000, // 억 단위
-      isProjection: false,
-    })),
-    ...projections.map(p => ({
-      date: p.date,
-      projectedValue: p.assetValue / 10000,
-      isProjection: true,
-    })),
+    ...recordsWithReturns.map(r => {
+      const yearFraction = baseDate ? dateToYearFraction(r.date, baseDate) : 0;
+      const trend = trendLine.find(t => t.date === r.date);
+      return {
+        date: r.date,
+        yearFraction,
+        value: r.assetValue / 10000, // 억 단위
+        trendValue: trend ? trend.trendValue / 10000 : null,
+        isProjection: false,
+      };
+    }),
+    ...projections.map(p => {
+      const yearFraction = baseDate ? dateToYearFraction(p.date, baseDate) : 0;
+      // 예측 구간의 추세선 연장
+      const extendedTrendValue = regression
+        ? (regression.slope * yearFraction + regression.intercept) / 10000
+        : null;
+      return {
+        date: p.date,
+        yearFraction,
+        projectedValue: p.assetValue / 10000,
+        extendedTrendValue,
+        isProjection: true,
+      };
+    }),
   ];
 
   // 기록 추가/수정
@@ -304,20 +324,40 @@ const AssetTrackingView = () => {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                <XAxis
+                  dataKey="yearFraction"
+                  type="number"
+                  domain={['dataMin', 'dataMax']}
+                  tick={{ fill: '#6b7280', fontSize: 11 }}
+                  tickLine={false}
+                  axisLine={{ stroke: '#e5e7eb' }}
+                  tickFormatter={(val) => {
+                    const years = Math.floor(val);
+                    const months = Math.round((val - years) * 12);
+                    if (val === 0) return '시작';
+                    if (months === 0) return `${years}년`;
+                    return `${years}년${months}월`;
+                  }}
+                />
                 <YAxis tickFormatter={(v) => `${v.toFixed(1)}억`} tick={{ fontSize: 11 }} />
                 <Tooltip
-                  content={({ active, payload, label }) => {
+                  content={({ active, payload }) => {
                     if (!active || !payload?.length) return null;
                     const data = payload[0].payload;
                     return (
                       <div className="rounded-lg border bg-white/95 p-3 shadow-lg text-sm">
-                        <div className="font-semibold text-gray-800 mb-1">{label}</div>
-                        {data.value && (
+                        <div className="font-semibold text-gray-800 mb-1">{data.date}</div>
+                        {data.value != null && (
                           <div className="text-blue-600">실제: {(data.value * 10000).toLocaleString()}만원</div>
                         )}
-                        {data.projectedValue && (
+                        {data.trendValue != null && (
+                          <div className="text-emerald-600">추세: {(data.trendValue * 10000).toLocaleString()}만원</div>
+                        )}
+                        {data.projectedValue != null && (
                           <div className="text-purple-600">예측: {(data.projectedValue * 10000).toLocaleString()}만원</div>
+                        )}
+                        {data.extendedTrendValue != null && (
+                          <div className="text-emerald-400">추세(연장): {(data.extendedTrendValue * 10000).toLocaleString()}만원</div>
                         )}
                       </div>
                     );
@@ -329,9 +369,36 @@ const AssetTrackingView = () => {
                   stroke="#3b82f6"
                   fill="url(#assetGradient)"
                   strokeWidth={2}
-                  dot={{ r: 3, fill: '#3b82f6' }}
+                  dot={{ r: 4, fill: '#3b82f6' }}
                   name="실제 자산"
                 />
+                {/* 추세선 (선형 회귀) */}
+                {regression && (
+                  <Line
+                    type="linear"
+                    dataKey="trendValue"
+                    stroke="#10b981"
+                    strokeWidth={2}
+                    strokeDasharray="8 4"
+                    dot={false}
+                    name="추세선"
+                    connectNulls={true}
+                  />
+                )}
+                {/* 예측 구간 연장 추세선 */}
+                {showProjection && regression && (
+                  <Line
+                    type="linear"
+                    dataKey="extendedTrendValue"
+                    stroke="#10b981"
+                    strokeWidth={1.5}
+                    strokeDasharray="4 4"
+                    dot={false}
+                    opacity={0.5}
+                    name="추세선(연장)"
+                    connectNulls={true}
+                  />
+                )}
                 {showProjection && (
                   <Line
                     type="monotone"
@@ -345,7 +412,7 @@ const AssetTrackingView = () => {
                 )}
                 {recordsWithReturns.length > 0 && (
                   <ReferenceLine
-                    x={recordsWithReturns[recordsWithReturns.length - 1]?.date}
+                    x={chartData.find(d => !d.isProjection && d.date === recordsWithReturns[recordsWithReturns.length - 1]?.date)?.yearFraction || 0}
                     stroke="#6b7280"
                     strokeDasharray="3 3"
                     label={{ value: '현재', position: 'top', fontSize: 10 }}
@@ -443,6 +510,10 @@ const AssetTrackingView = () => {
               {editingId ? '수정' : '추가'}
             </button>
           </div>
+        </div>
+
+        <div className="mb-3 text-xs text-gray-500">
+          월 수익률 = (현재 총자산 - 이전 총자산 - 투자금) ÷ 이전 총자산. 투자금은 원금 증가분(없으면 입력값) 기준입니다.
         </div>
 
         {/* 기록 테이블 */}

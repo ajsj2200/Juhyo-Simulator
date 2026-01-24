@@ -378,3 +378,93 @@ export const getCurrentMonth = () => {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 };
+
+/**
+ * 날짜 문자열을 숫자(연차)로 변환
+ * @param {string} dateStr - "YYYY-MM-DD" 또는 "YYYY-MM" 형식
+ * @param {string} baseDate - 기준 날짜
+ * @returns {number} - 기준일로부터의 연차 (소수점 포함)
+ */
+export const dateToYearFraction = (dateStr, baseDate) => {
+  const parseDate = (d) => d.length === 7 ? new Date(d + '-01') : new Date(d);
+  const date = parseDate(dateStr);
+  const base = parseDate(baseDate);
+  const diffMs = date - base;
+  const msPerYear = 365.25 * 24 * 60 * 60 * 1000;
+  return diffMs / msPerYear;
+};
+
+/**
+ * 선형 회귀 분석 (최소제곱법)
+ * @param {Array} points - [{x, y}, ...] 형태의 데이터 포인트
+ * @returns {Object} { slope, intercept, r2 } - 기울기, 절편, 결정계수
+ */
+export const linearRegression = (points) => {
+  if (!points || points.length < 2) {
+    return { slope: 0, intercept: 0, r2: 0 };
+  }
+
+  const n = points.length;
+  let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+
+  for (const { x, y } of points) {
+    sumX += x;
+    sumY += y;
+    sumXY += x * y;
+    sumX2 += x * x;
+  }
+
+  const denominator = n * sumX2 - sumX * sumX;
+  if (denominator === 0) {
+    return { slope: 0, intercept: sumY / n, r2: 0 };
+  }
+
+  const slope = (n * sumXY - sumX * sumY) / denominator;
+  const intercept = (sumY - slope * sumX) / n;
+
+  // R-squared (결정계수) 계산
+  const meanY = sumY / n;
+  let ssTotal = 0, ssResidual = 0;
+  for (const { x, y } of points) {
+    const predicted = slope * x + intercept;
+    ssTotal += (y - meanY) ** 2;
+    ssResidual += (y - predicted) ** 2;
+  }
+  const r2 = ssTotal > 0 ? 1 - ssResidual / ssTotal : 0;
+
+  return { slope, intercept, r2 };
+};
+
+/**
+ * 회귀 기반 추세선 생성
+ * @param {Array} records - 자산 기록 배열
+ * @returns {Object} { trendLine, regression, baseDate } - 추세선 데이터 및 회귀 결과
+ */
+export const calculateTrendLine = (records) => {
+  if (!records || records.length < 2) {
+    return { trendLine: [], regression: null, baseDate: null };
+  }
+
+  const sorted = [...records].sort((a, b) => a.date.localeCompare(b.date));
+  const baseDate = sorted[0].date;
+
+  // 회귀 분석용 데이터 포인트
+  const points = sorted.map(r => ({
+    x: dateToYearFraction(r.date, baseDate),
+    y: r.assetValue,
+  }));
+
+  const regression = linearRegression(points);
+
+  // 추세선 데이터 생성 (첫 점부터 마지막 점까지)
+  const trendLine = sorted.map(r => {
+    const x = dateToYearFraction(r.date, baseDate);
+    return {
+      date: r.date,
+      yearFraction: x,
+      trendValue: regression.slope * x + regression.intercept,
+    };
+  });
+
+  return { trendLine, regression, baseDate };
+};

@@ -36,6 +36,7 @@ import {
   calculateWealthWithMarriageHistorical,
   runMonteCarloPlan,
 } from '../utils/calculations';
+import { linearRegression } from '../utils/assetTracking';
 
 const LOCAL_PRESET_KEY = 'vooAppCustomPresetsV1';
 
@@ -569,43 +570,118 @@ export const SimulatorProvider = ({ children }) => {
   // useHouseInChart 옵션에 따라 집 포함/제외 MC 데이터 선택
   const chartDataWithMonteCarlo = useMemo(() => {
     // 집 포함 시 percentilesByYearWithHouse 사용, 집 제외 시 percentilesByYear 사용
-    const percentiles = useHouseInChart 
-      ? mcResult?.percentilesByYearWithHouse 
+    const percentiles = useHouseInChart
+      ? mcResult?.percentilesByYearWithHouse
       : mcResult?.percentilesByYear;
-    if (!percentiles) return chartData;
 
-    // 실제 자산 추적 데이터를 연차(year)로 매핑
-    const actualAssetMap = new Map();
-    if (assetRecords && assetRecords.length > 0) {
-      const now = new Date();
-      const startYear = now.getFullYear();
-      assetRecords.forEach(record => {
-        // YYYY-MM-DD 또는 YYYY-MM 형식 처리
-        const recordDate = record.date.length === 7 
-          ? new Date(record.date + '-01') 
-          : new Date(record.date);
-        // 연차 계산: (기록 날짜 - 현재) / 365
-        const yearsSinceStart = (recordDate.getFullYear() - startYear) + (recordDate.getMonth() / 12);
-        const roundedYear = Math.round(yearsSinceStart * 2) / 2; // 0.5년 단위로 반올림
-        // 만원 단위에서 억 단위로 변환
-        const assetInEok = (record.assetValue || 0) / 10000;
-        // 같은 연차에 여러 기록이 있으면 마지막 값 사용
-        actualAssetMap.set(roundedYear, assetInEok);
-      });
+    // 기본 차트 데이터에 MC 퍼센타일 추가
+    let baseData = chartData.map((d, i) => ({
+      ...d,
+      mc_p10: percentiles?.p10?.[i] != null ? percentiles.p10[i] / 10000 : null,
+      mc_p25: percentiles?.p25?.[i] != null ? percentiles.p25[i] / 10000 : null,
+      mc_p50: percentiles?.p50?.[i] != null ? percentiles.p50[i] / 10000 : null,
+      mc_p75: percentiles?.p75?.[i] != null ? percentiles.p75[i] / 10000 : null,
+      mc_p90: percentiles?.p90?.[i] != null ? percentiles.p90[i] / 10000 : null,
+      mc_mean: percentiles?.mean?.[i] != null ? percentiles.mean[i] / 10000 : null,
+      actualAsset: null,
+      actualTrendValue: null,
+    }));
+
+    // 자산 추적 데이터가 없으면 기본 데이터 반환
+    if (!assetRecords || assetRecords.length === 0) {
+      return baseData;
     }
 
-    return chartData.map((d, i) => ({
-      ...d,
-      mc_p10: percentiles.p10?.[i] != null ? percentiles.p10[i] / 10000 : null,
-      mc_p25: percentiles.p25?.[i] != null ? percentiles.p25[i] / 10000 : null,
-      mc_p50: percentiles.p50?.[i] != null ? percentiles.p50[i] / 10000 : null,
-      mc_p75: percentiles.p75?.[i] != null ? percentiles.p75[i] / 10000 : null,
-      mc_p90: percentiles.p90?.[i] != null ? percentiles.p90[i] / 10000 : null,
-      mc_mean: percentiles.mean?.[i] != null ? percentiles.mean[i] / 10000 : null,
-      // 실제 자산 값 (해당 연차에 기록이 있으면 표시)
-      actualAsset: actualAssetMap.get(i) ?? null,
-    }));
-  }, [chartData, mcResult, useHouseInChart, assetRecords]);
+    // 현재 날짜 기준으로 연차 계산
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+
+    // 자산 추적 데이터를 소수점 year로 변환
+    const actualAssetPoints = assetRecords
+      .map(record => {
+        const recordDate = record.date.length === 7
+          ? new Date(record.date + '-01')
+          : new Date(record.date);
+        // 월 단위 정확한 연차 계산
+        const yearFraction = (recordDate.getFullYear() - currentYear) +
+                            (recordDate.getMonth() - currentMonth) / 12;
+        const assetInEok = (record.assetValue || 0) / 10000;
+        return {
+          year: yearFraction,
+          actualAsset: assetInEok,
+          date: record.date,
+        };
+      })
+      .filter(p => p.year >= 0) // 미래 데이터만 (시뮬레이션 범위 내)
+      .sort((a, b) => a.year - b.year);
+
+    // 회귀 분석 계산 (2개 이상일 때만)
+    let regression = null;
+    if (actualAssetPoints.length >= 2) {
+      const regressionPoints = actualAssetPoints.map(p => ({
+        x: p.year,
+        y: p.actualAsset,
+      }));
+      regression = linearRegression(regressionPoints);
+    }
+
+    // 자산 추적 포인트를 기본 데이터에 병합
+    const mergedData = [...baseData];
+
+    // 추세선 범위: 첫 기록부터 마지막 기록까지 + 미래 연장
+    const minYear = actualAssetPoints.length > 0 ? actualAssetPoints[0].year : 0;
+    const maxYear = actualAssetPoints.length > 0
+      ? Math.max(actualAssetPoints[actualAssetPoints.length - 1].year + 5, years)
+      : years;
+
+    // 기존 연 단위 데이터에 추세선 값 추가
+    mergedData.forEach(d => {
+      if (regression && d.year >= minYear && d.year <= maxYear) {
+        d.actualTrendValue = regression.slope * d.year + regression.intercept;
+      }
+    });
+
+    // 자산 추적 포인트 추가 (새로운 소수점 year 포인트)
+    actualAssetPoints.forEach(point => {
+      // 이미 존재하는 year와 충분히 가까우면 해당 데이터에 추가
+      const existingIdx = mergedData.findIndex(d => Math.abs(d.year - point.year) < 0.01);
+      if (existingIdx >= 0) {
+        mergedData[existingIdx].actualAsset = point.actualAsset;
+        mergedData[existingIdx].actualAssetDate = point.date;
+        if (regression) {
+          mergedData[existingIdx].actualTrendValue = regression.slope * point.year + regression.intercept;
+        }
+      } else {
+        // 새 포인트 추가
+        const trendValue = regression ? regression.slope * point.year + regression.intercept : null;
+        mergedData.push({
+          year: point.year,
+          actualAsset: point.actualAsset,
+          actualAssetDate: point.date,
+          actualTrendValue: trendValue,
+          // 다른 필드는 null
+          you: null,
+          youNoMarriage: null,
+          other: null,
+          house: null,
+          remainingLoan: null,
+          spouseWealth: null,
+          mc_p10: null,
+          mc_p25: null,
+          mc_p50: null,
+          mc_p75: null,
+          mc_p90: null,
+          mc_mean: null,
+        });
+      }
+    });
+
+    // year 기준 정렬
+    mergedData.sort((a, b) => a.year - b.year);
+
+    return mergedData;
+  }, [chartData, mcResult, useHouseInChart, assetRecords, years]);
 
   const hasMonteCarloBand = useMemo(() => {
     return chartDataWithMonteCarlo.some(

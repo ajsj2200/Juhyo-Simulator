@@ -779,6 +779,19 @@ const WealthChart = ({
               activeDot={{ r: 5, stroke: '#fff', strokeWidth: 2 }}
             />
           )}
+          {/* 실제 자산 추세선 (회귀 예측) */}
+          {showActualAssets && hasActualAssetData && (
+            <Line
+              type="linear"
+              dataKey="actualTrendValue"
+              stroke="#10b981"
+              strokeWidth={2}
+              strokeDasharray="8 4"
+              dot={false}
+              name="📈 추세선"
+              connectNulls={true}
+            />
+          )}
           {/* 실제 자산 기록 */}
           {showActualAssets && hasActualAssetData && (
             <Line
@@ -798,11 +811,11 @@ const WealthChart = ({
                     {/* 메인 점 */}
                     <circle cx={cx} cy={cy} r={7} fill="#ea580c" stroke="#fff" strokeWidth={3} />
                     {/* 라벨 */}
-                    <text 
-                      x={cx} 
-                      y={cy - 18} 
-                      textAnchor="middle" 
-                      fill="#ea580c" 
+                    <text
+                      x={cx}
+                      y={cy - 18}
+                      textAnchor="middle"
+                      fill="#ea580c"
                       fontSize={11}
                       fontWeight="bold"
                       style={{ textShadow: '0 0 4px white, 0 0 4px white' }}
@@ -813,7 +826,7 @@ const WealthChart = ({
                 );
               }}
               activeDot={{ r: 12, fill: '#c2410c', stroke: '#fff', strokeWidth: 3 }}
-              connectNulls={false}
+              connectNulls={true}
             />
           )}
         </ComposedChart>

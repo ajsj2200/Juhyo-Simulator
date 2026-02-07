@@ -51,6 +51,18 @@ const ResultsView = () => {
   const [mcYear, setMcYear] = useState(years);
   const [portfolioMcYear, setPortfolioMcYear] = useState(years);
 
+  const formatEok = (value) => {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return '-';
+    return `${(n / 10000).toFixed(2)}억`;
+  };
+
+  const formatPercent = (value) => {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return '-';
+    return `${(n * 100).toFixed(2)}%`;
+  };
+
   const buildHistogram = (samples = [], bins = 18) => {
     if (!samples?.length) return [];
     const positive = samples.filter((v) => Number.isFinite(v) && v > 0).sort((a, b) => a - b);
@@ -73,8 +85,40 @@ const ResultsView = () => {
     });
   };
 
+  const buildSampleStats = (samples = []) => {
+    if (!samples?.length) return null;
+    const filtered = samples.filter((v) => Number.isFinite(v));
+    if (!filtered.length) return null;
+    const sorted = [...filtered].sort((a, b) => a - b);
+    const pick = (p) => {
+      const idx = Math.max(0, Math.min(sorted.length - 1, Math.floor(p * (sorted.length - 1))));
+      return sorted[idx];
+    };
+    const mean = sorted.reduce((s, v) => s + v, 0) / sorted.length;
+    const belowZeroProbability = sorted.filter((v) => v <= 0).length / sorted.length;
+    return {
+      p5: pick(0.05),
+      p50: pick(0.5),
+      p95: pick(0.95),
+      mean,
+      belowZeroProbability,
+    };
+  };
+
   const mcHistogramData = useMemo(() => buildHistogram(mcResult?.samplesByYear?.[mcYear]), [mcResult, mcYear]);
   const mcHistogramTotal = useMemo(() => mcHistogramData.reduce((s, d) => s + (d.count || 0), 0), [mcHistogramData]);
+  const mcSummary = useMemo(() => {
+    if (!mcResult) return null;
+    const stats = buildSampleStats(mcResult.samplesByYear?.[mcYear]);
+    if (stats) return stats;
+    return {
+      p5: mcResult.p5,
+      p50: mcResult.median,
+      p95: mcResult.p95,
+      mean: mcResult.mean,
+      belowZeroProbability: mcResult.belowZeroProbability,
+    };
+  }, [mcResult, mcYear]);
 
   const portfolioMcHistogramData = useMemo(
     () => buildHistogram(portfolioMcResult?.samplesByYear?.[portfolioMcYear]),
@@ -301,32 +345,32 @@ const ResultsView = () => {
                 <div className="p-3 rounded-lg bg-white/80 border border-indigo-100">
                   <div className="text-xs text-gray-500">5% (워스트)</div>
                   <div className="text-xl font-bold text-indigo-700">
-                    {(mcResult.p5 / 10000).toFixed(2)}억
+                    {formatEok(mcSummary?.p5)}
                   </div>
                 </div>
                 <div className="p-3 rounded-lg bg-white/80 border border-indigo-100">
                   <div className="text-xs text-gray-500">50% (중앙값)</div>
                   <div className="text-xl font-bold text-indigo-900">
-                    {(mcResult.median / 10000).toFixed(2)}억
+                    {formatEok(mcSummary?.p50)}
                   </div>
                 </div>
                 <div className="p-3 rounded-lg bg-white/80 border border-indigo-100">
                   <div className="text-xs text-gray-500">95% (베스트)</div>
                   <div className="text-xl font-bold text-emerald-600">
-                    {(mcResult.p95 / 10000).toFixed(2)}억
+                    {formatEok(mcSummary?.p95)}
                   </div>
                 </div>
                 <div className="p-3 rounded-lg bg-white/80 border border-indigo-100">
                   <div className="text-xs text-gray-500">파산 확률</div>
                   <div className="text-xl font-bold text-red-600">
-                    {(mcResult.belowZeroProbability * 100).toFixed(2)}%
+                    {formatPercent(mcSummary?.belowZeroProbability)}
                   </div>
                 </div>
               </div>
               
               <div className="text-xs text-indigo-600 bg-indigo-100/50 p-2 rounded">
                 <strong>시뮬레이션 횟수:</strong> {mcResult.iterations}회 · 
-                <strong> 평균:</strong> {(mcResult.mean / 10000).toFixed(2)}억
+                <strong> 평균:</strong> {formatEok(mcSummary?.mean)}
               </div>
               <div className="mt-3 flex items-center gap-3 text-sm text-gray-700">
                 <div className="font-semibold">분포 연도</div>
@@ -380,19 +424,19 @@ const ResultsView = () => {
                 <div className="p-3 rounded-lg bg-white/80 border border-purple-100">
                   <div className="text-xs text-gray-500">10% (보수적)</div>
                   <div className="text-xl font-bold text-purple-700">
-                    {(portfolioMcResult.percentiles?.p10?.[years] / 10000)?.toFixed(2) || '-'}억
+                    {formatEok(portfolioMcResult.percentiles?.p10?.[portfolioMcYear])}
                   </div>
                 </div>
                 <div className="p-3 rounded-lg bg-white/80 border border-purple-100">
                   <div className="text-xs text-gray-500">50% (중앙값)</div>
                   <div className="text-xl font-bold text-purple-900">
-                    {(portfolioMcResult.percentiles?.p50?.[years] / 10000)?.toFixed(2) || '-'}억
+                    {formatEok(portfolioMcResult.percentiles?.p50?.[portfolioMcYear])}
                   </div>
                 </div>
                 <div className="p-3 rounded-lg bg-white/80 border border-purple-100">
                   <div className="text-xs text-gray-500">90% (낙관적)</div>
                   <div className="text-xl font-bold text-emerald-600">
-                    {(portfolioMcResult.percentiles?.p90?.[years] / 10000)?.toFixed(2) || '-'}억
+                    {formatEok(portfolioMcResult.percentiles?.p90?.[portfolioMcYear])}
                   </div>
                 </div>
                 <div className="p-3 rounded-lg bg-white/80 border border-purple-100">

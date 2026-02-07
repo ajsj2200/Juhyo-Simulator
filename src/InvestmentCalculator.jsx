@@ -274,6 +274,26 @@ const InvestmentCalculator = () => {
     });
   };
 
+  const buildSampleStats = (samples = []) => {
+    if (!samples?.length) return null;
+    const filtered = samples.filter((v) => Number.isFinite(v));
+    if (!filtered.length) return null;
+    const sorted = [...filtered].sort((a, b) => a - b);
+    const pick = (p) => {
+      const idx = Math.max(0, Math.min(sorted.length - 1, Math.floor(p * (sorted.length - 1))));
+      return sorted[idx];
+    };
+    const mean = sorted.reduce((s, v) => s + v, 0) / sorted.length;
+    const belowZeroProbability = sorted.filter((v) => v <= 0).length / sorted.length;
+    return {
+      p5: pick(0.05),
+      p50: pick(0.5),
+      p95: pick(0.95),
+      mean,
+      belowZeroProbability,
+    };
+  };
+
   useEffect(() => {
     const data = buildHistogram(mcResult?.samplesByYear?.[mcHistogramYear]);
     setMcHistogramData(data);
@@ -290,6 +310,19 @@ const InvestmentCalculator = () => {
   useEffect(() => {
     setPortfolioMcYear((prev) => Math.min(prev, years));
   }, [years]);
+
+  const mcSummary = useMemo(() => {
+    if (!mcResult) return null;
+    const stats = buildSampleStats(mcResult.samplesByYear?.[mcHistogramYear]);
+    if (stats) return stats;
+    return {
+      p5: mcResult.p5,
+      p50: mcResult.median,
+      p95: mcResult.p95,
+      mean: mcResult.mean,
+      belowZeroProbability: mcResult.belowZeroProbability,
+    };
+  }, [mcResult, mcHistogramYear]);
   // 로컬 프리셋
   const [savedPresets, setSavedPresets] = useState([]);
   const [presetName, setPresetName] = useState('');
@@ -1425,23 +1458,27 @@ ${chartDataWithMonteCarlo.map((data, idx) => {
               <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
                 <div className="p-3 rounded-lg bg-blue-50 border border-blue-100">
                   <div className="text-xs text-gray-600">5% (워스트)</div>
-                  <div className="text-lg font-bold text-blue-700">{(mcResult.p5 / 10000).toFixed(2)}억</div>
+                  <div className="text-lg font-bold text-blue-700">{formatEokFromManwon(mcSummary?.p5)}억</div>
                 </div>
                 <div className="p-3 rounded-lg bg-gray-50 border border-gray-200">
                   <div className="text-xs text-gray-600">50% (중앙값)</div>
-                  <div className="text-lg font-bold text-gray-800">{(mcResult.median / 10000).toFixed(2)}억</div>
+                  <div className="text-lg font-bold text-gray-800">{formatEokFromManwon(mcSummary?.p50)}억</div>
                 </div>
                 <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-100">
                   <div className="text-xs text-gray-600">95% (베스트)</div>
-                  <div className="text-lg font-bold text-emerald-700">{(mcResult.p95 / 10000).toFixed(2)}억</div>
+                  <div className="text-lg font-bold text-emerald-700">{formatEokFromManwon(mcSummary?.p95)}억</div>
                 </div>
                 <div className="p-3 rounded-lg bg-orange-50 border border-orange-100">
                   <div className="text-xs text-gray-600">평균</div>
-                  <div className="text-lg font-bold text-orange-700">{(mcResult.mean / 10000).toFixed(2)}억</div>
+                  <div className="text-lg font-bold text-orange-700">{formatEokFromManwon(mcSummary?.mean)}억</div>
                 </div>
                 <div className="p-3 rounded-lg bg-red-50 border border-red-100">
                   <div className="text-xs text-gray-600">파산 확률</div>
-                  <div className="text-lg font-bold text-red-700">{(mcResult.belowZeroProbability * 100).toFixed(2)}%</div>
+                  <div className="text-lg font-bold text-red-700">
+                    {mcSummary?.belowZeroProbability != null
+                      ? `${(mcSummary.belowZeroProbability * 100).toFixed(2)}%`
+                      : '-'}
+                  </div>
                 </div>
               </div>
               {mcResult && (
@@ -1541,25 +1578,25 @@ ${chartDataWithMonteCarlo.map((data, idx) => {
                   <div className="p-3 rounded-lg bg-purple-50 border border-purple-100">
                     <div className="text-xs text-gray-600">p10 (보수적)</div>
                     <div className="text-lg font-bold text-purple-700">
-                      {formatEokFromManwon(portfolioMcResult.percentilesByYear?.p10?.[years])}억
+                      {formatEokFromManwon(portfolioMcResult.percentilesByYear?.p10?.[portfolioMcYear])}억
                     </div>
                   </div>
                   <div className="p-3 rounded-lg bg-gray-50 border border-gray-200">
                     <div className="text-xs text-gray-600">p50 (중앙값)</div>
                     <div className="text-lg font-bold text-gray-800">
-                      {formatEokFromManwon(portfolioMcResult.percentilesByYear?.p50?.[years])}억
+                      {formatEokFromManwon(portfolioMcResult.percentilesByYear?.p50?.[portfolioMcYear])}억
                     </div>
                   </div>
                   <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-100">
                     <div className="text-xs text-gray-600">p90 (낙관적)</div>
                     <div className="text-lg font-bold text-emerald-700">
-                      {formatEokFromManwon(portfolioMcResult.percentilesByYear?.p90?.[years])}억
+                      {formatEokFromManwon(portfolioMcResult.percentilesByYear?.p90?.[portfolioMcYear])}억
                     </div>
                   </div>
                   <div className="p-3 rounded-lg bg-orange-50 border border-orange-100">
                     <div className="text-xs text-gray-600">평균</div>
                     <div className="text-lg font-bold text-orange-700">
-                      {formatEokFromManwon(portfolioMcResult.percentilesByYear?.mean?.[years])}억
+                      {formatEokFromManwon(portfolioMcResult.percentilesByYear?.mean?.[portfolioMcYear])}억
                     </div>
                   </div>
                   <div className="p-3 rounded-lg bg-blue-50 border border-blue-100">

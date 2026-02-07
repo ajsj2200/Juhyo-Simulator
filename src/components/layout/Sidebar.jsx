@@ -81,7 +81,9 @@ const NavItem = ({ item, activeView, onViewChange, level = 0 }) => {
 };
 
 const Sidebar = ({ className = '' }) => {
-  const { activeView, setActiveView } = useSimulator();
+  const { activeView, setActiveView, theme, toggleTheme } = useSimulator();
+  
+  const themeIcon = theme === 'dark' ? '☀️' : '🌙';
 
   return (
     <aside
@@ -91,10 +93,23 @@ const Sidebar = ({ className = '' }) => {
         overflow-y-auto z-40 ${className}`}
     >
       {/* Header */}
-      <div className="h-16 flex items-center px-4 border-b border-gray-100 dark:border-slate-800">
+      <div className="h-16 flex items-center justify-between px-4 border-b border-gray-100 dark:border-slate-800">
         <h1 className="text-lg font-bold text-gray-800 dark:text-slate-100">
           💰 인생 시뮬레이터
         </h1>
+        <button
+          type="button"
+          onClick={toggleTheme}
+          aria-label="테마 전환"
+          className="
+            w-9 h-9 flex items-center justify-center rounded-lg border border-gray-200
+            bg-white text-gray-700 transition-colors duration-150
+            hover:bg-gray-100 dark:border-slate-700 dark:bg-slate-800
+            dark:text-slate-200 dark:hover:bg-slate-700
+          "
+        >
+          <span aria-hidden="true">{themeIcon}</span>
+        </button>
       </div>
 
       {/* Navigation */}

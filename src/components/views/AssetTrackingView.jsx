@@ -29,6 +29,7 @@ const AssetTrackingView = () => {
   const {
     assetRecords,
     setAssetRecords,
+    theme,
   } = useSimulator();
 
   // 입력 폼 상태
@@ -44,6 +45,22 @@ const AssetTrackingView = () => {
   const [manualReturnRate, setManualReturnRate] = useState('');
 
   const fileInputRef = useRef(null);
+
+  const isDark = theme === 'dark';
+  const chartColors = {
+    grid: theme === 'dark' ? '#334155' : '#e5e7eb',
+    axis: theme === 'dark' ? '#475569' : '#e5e7eb',
+    tick: theme === 'dark' ? '#cbd5e1' : '#6b7280',
+    tooltipBg: theme === 'dark' ? 'bg-slate-900/95 border-slate-700 text-slate-100' : 'bg-white/95 border-gray-200 text-gray-800',
+    tooltipText: theme === 'dark' ? 'text-slate-300' : 'text-gray-800',
+    tooltipSubtle: theme === 'dark' ? 'text-slate-300' : 'text-gray-700',
+  };
+  const tooltipContainerClass = `rounded-lg border p-3 shadow-lg text-sm ${chartColors.tooltipBg}`;
+  const tooltipTitleClass = `font-semibold mb-1 ${chartColors.tooltipText}`;
+  const tooltipActualClass = isDark ? 'text-blue-300' : 'text-blue-600';
+  const tooltipTrendClass = isDark ? 'text-emerald-300' : 'text-emerald-600';
+  const tooltipProjectionClass = isDark ? 'text-purple-300' : 'text-purple-600';
+  const tooltipExtendedClass = isDark ? 'text-emerald-200' : 'text-emerald-400';
 
   // 계산된 데이터
   const recordsWithReturns = calculateMonthlyReturns(assetRecords);
@@ -323,14 +340,14 @@ const AssetTrackingView = () => {
                     <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.05} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
                 <XAxis
                   dataKey="yearFraction"
                   type="number"
                   domain={['dataMin', 'dataMax']}
-                  tick={{ fill: '#6b7280', fontSize: 11 }}
+                  tick={{ fill: chartColors.tick, fontSize: 11 }}
                   tickLine={false}
-                  axisLine={{ stroke: '#e5e7eb' }}
+                  axisLine={{ stroke: chartColors.axis }}
                   tickFormatter={(val) => {
                     const years = Math.floor(val);
                     const months = Math.round((val - years) * 12);
@@ -339,25 +356,30 @@ const AssetTrackingView = () => {
                     return `${years}년${months}월`;
                   }}
                 />
-                <YAxis tickFormatter={(v) => `${v.toFixed(1)}억`} tick={{ fontSize: 11 }} />
+                <YAxis
+                  tickFormatter={(v) => `${v.toFixed(1)}억`}
+                  tick={{ fontSize: 11, fill: chartColors.tick }}
+                  axisLine={{ stroke: chartColors.axis }}
+                  tickLine={{ stroke: chartColors.axis }}
+                />
                 <Tooltip
                   content={({ active, payload }) => {
                     if (!active || !payload?.length) return null;
                     const data = payload[0].payload;
                     return (
-                      <div className="rounded-lg border bg-white/95 p-3 shadow-lg text-sm">
-                        <div className="font-semibold text-gray-800 mb-1">{data.date}</div>
+                      <div className={tooltipContainerClass}>
+                        <div className={tooltipTitleClass}>{data.date}</div>
                         {data.value != null && (
-                          <div className="text-blue-600">실제: {(data.value * 10000).toLocaleString()}만원</div>
+                          <div className={tooltipActualClass}>실제: {(data.value * 10000).toLocaleString()}만원</div>
                         )}
                         {data.trendValue != null && (
-                          <div className="text-emerald-600">추세: {(data.trendValue * 10000).toLocaleString()}만원</div>
+                          <div className={tooltipTrendClass}>추세: {(data.trendValue * 10000).toLocaleString()}만원</div>
                         )}
                         {data.projectedValue != null && (
-                          <div className="text-purple-600">예측: {(data.projectedValue * 10000).toLocaleString()}만원</div>
+                          <div className={tooltipProjectionClass}>예측: {(data.projectedValue * 10000).toLocaleString()}만원</div>
                         )}
                         {data.extendedTrendValue != null && (
-                          <div className="text-emerald-400">추세(연장): {(data.extendedTrendValue * 10000).toLocaleString()}만원</div>
+                          <div className={tooltipExtendedClass}>추세(연장): {(data.extendedTrendValue * 10000).toLocaleString()}만원</div>
                         )}
                       </div>
                     );
@@ -413,9 +435,9 @@ const AssetTrackingView = () => {
                 {recordsWithReturns.length > 0 && (
                   <ReferenceLine
                     x={chartData.find(d => !d.isProjection && d.date === recordsWithReturns[recordsWithReturns.length - 1]?.date)?.yearFraction || 0}
-                    stroke="#6b7280"
+                    stroke={chartColors.tick}
                     strokeDasharray="3 3"
-                    label={{ value: '현재', position: 'top', fontSize: 10 }}
+                    label={{ value: '현재', position: 'top', fontSize: 10, fill: chartColors.tick }}
                   />
                 )}
               </ComposedChart>

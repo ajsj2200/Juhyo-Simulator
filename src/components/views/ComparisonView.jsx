@@ -13,8 +13,8 @@ const ComparisonView = () => {
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
-        <h1 className="text-heading-1 mb-2">비교 대상</h1>
-        <p className="text-body">다른 투자 전략과 비교해보세요.</p>
+        <h1 className="text-heading-1 mb-2 dark:text-slate-100">비교 대상</h1>
+        <p className="text-body dark:text-slate-300">다른 투자 전략과 비교해보세요.</p>
       </div>
 
       {/* Preset Buttons */}

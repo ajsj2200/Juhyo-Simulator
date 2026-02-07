@@ -31,9 +31,27 @@ const CrisisView = () => {
     SP500_YEARS,
     mcResult,
     clearSp500MonteCarlo,
+    theme,
   } = useSimulator();
 
   const [exclusiveModalOpen, setExclusiveModalOpen] = useState(false);
+
+  const chartColors = {
+    grid: theme === 'dark' ? '#334155' : '#e5e7eb',
+    axis: theme === 'dark' ? '#475569' : '#e5e7eb',
+    tick: theme === 'dark' ? '#cbd5e1' : '#6b7280',
+    tooltipBg: theme === 'dark' ? 'rgba(15, 23, 42, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+    tooltipBorder: theme === 'dark' ? '#334155' : '#e5e7eb',
+    tooltipText: theme === 'dark' ? '#e2e8f0' : '#374151',
+    tooltipCursor: theme === 'dark' ? 'rgba(148, 163, 184, 0.12)' : 'rgba(99, 102, 241, 0.06)',
+    zeroLine: theme === 'dark' ? '#64748b' : '#94a3b8',
+    highlight: theme === 'dark' ? '#4ade80' : '#16a34a',
+    line: theme === 'dark' ? '#60a5fa' : '#2563eb',
+    barPositive: theme === 'dark' ? '#22c55e' : '#86efac',
+    barNegative: theme === 'dark' ? '#f87171' : '#fca5a5',
+    barPositiveActive: theme === 'dark' ? '#4ade80' : '#16a34a',
+    barNegativeActive: theme === 'dark' ? '#f87171' : '#dc2626',
+  };
 
   const onToggleHistorical = (next) => {
     if (next && mcResult) {
@@ -147,25 +165,25 @@ const CrisisView = () => {
                   <div className="h-44">
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={sp500ChartData} margin={{ top: 8, right: 10, left: 0, bottom: 10 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
                         <XAxis
                           dataKey="year"
                           type="number"
                           domain={['dataMin', 'dataMax']}
-                          tick={{ fontSize: 10, fill: '#6b7280' }}
+                          tick={{ fontSize: 10, fill: chartColors.tick }}
                           tickLine={false}
-                          axisLine={{ stroke: '#e5e7eb' }}
+                          axisLine={{ stroke: chartColors.axis }}
                           interval={9}
                           tickFormatter={(v) => `${v}`}
                         />
                         <YAxis
-                          tick={{ fontSize: 10, fill: '#6b7280' }}
+                          tick={{ fontSize: 10, fill: chartColors.tick }}
                           tickLine={false}
-                          axisLine={{ stroke: '#e5e7eb' }}
+                          axisLine={{ stroke: chartColors.axis }}
                           tickFormatter={formatIndexTick}
                           width={48}
                         />
-                        <ReferenceLine x={historicalStartYear} stroke="#16a34a" strokeDasharray="4 4" />
+                        <ReferenceLine x={historicalStartYear} stroke={chartColors.highlight} strokeDasharray="4 4" />
                         <Tooltip
                           formatter={(v, name) => {
                             if (name === 'level') {
@@ -177,11 +195,14 @@ const CrisisView = () => {
                             return [String(v), name];
                           }}
                           labelFormatter={(l) => `${l}년`}
+                          contentStyle={{ backgroundColor: chartColors.tooltipBg, borderColor: chartColors.tooltipBorder }}
+                          labelStyle={{ color: chartColors.tooltipText }}
+                          itemStyle={{ color: chartColors.tooltipText }}
                         />
                         <Line
                           type="monotone"
                           dataKey="level"
-                          stroke="#2563eb"
+                          stroke={chartColors.line}
                           strokeWidth={2}
                           dot={false}
                         />
@@ -195,30 +216,33 @@ const CrisisView = () => {
                   <div className="h-44">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={sp500ChartData} margin={{ top: 8, right: 10, left: 0, bottom: 10 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
                         <XAxis
                           dataKey="year"
                           type="number"
                           domain={['dataMin', 'dataMax']}
-                          tick={{ fontSize: 10, fill: '#6b7280' }}
+                          tick={{ fontSize: 10, fill: chartColors.tick }}
                           tickLine={false}
-                          axisLine={{ stroke: '#e5e7eb' }}
+                          axisLine={{ stroke: chartColors.axis }}
                           interval={9}
                           tickFormatter={(v) => `${v}`}
                         />
                         <YAxis
-                          tick={{ fontSize: 10, fill: '#6b7280' }}
+                          tick={{ fontSize: 10, fill: chartColors.tick }}
                           tickLine={false}
-                          axisLine={{ stroke: '#e5e7eb' }}
+                          axisLine={{ stroke: chartColors.axis }}
                           tickFormatter={(v) => `${v}%`}
                           width={42}
                         />
-                        <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="4 4" />
-                        <ReferenceLine x={historicalStartYear} stroke="#16a34a" strokeDasharray="4 4" />
+                        <ReferenceLine y={0} stroke={chartColors.zeroLine} strokeDasharray="4 4" />
+                        <ReferenceLine x={historicalStartYear} stroke={chartColors.highlight} strokeDasharray="4 4" />
                         <Tooltip
-                          cursor={{ fill: 'rgba(99, 102, 241, 0.06)' }}
+                          cursor={{ fill: chartColors.tooltipCursor }}
                           formatter={(v) => [`${Number(v).toFixed(2)}%`, '수익률']}
                           labelFormatter={(l) => `${l}년`}
+                          contentStyle={{ backgroundColor: chartColors.tooltipBg, borderColor: chartColors.tooltipBorder }}
+                          labelStyle={{ color: chartColors.tooltipText }}
+                          itemStyle={{ color: chartColors.tooltipText }}
                         />
                         <Bar dataKey="ret" radius={[4, 4, 0, 0]}>
                           {sp500ChartData.map((row) => (
@@ -227,11 +251,11 @@ const CrisisView = () => {
                               fill={
                                 row.year === historicalStartYear
                                   ? row.ret >= 0
-                                    ? '#16a34a'
-                                    : '#dc2626'
+                                    ? chartColors.barPositiveActive
+                                    : chartColors.barNegativeActive
                                   : row.ret >= 0
-                                  ? '#86efac'
-                                  : '#fca5a5'
+                                  ? chartColors.barPositive
+                                  : chartColors.barNegative
                               }
                             />
                           ))}

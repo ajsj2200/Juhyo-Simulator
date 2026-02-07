@@ -14,7 +14,8 @@ const MobileNav = ({ className = '' }) => {
   return (
     <nav
       className={`lg:hidden fixed bottom-0 left-0 right-0
-        bg-white/90 backdrop-blur-lg border-t border-gray-200 z-50 ${className}`}
+        bg-white/90 backdrop-blur-lg border-t border-gray-200 z-50
+        dark:bg-slate-900/90 dark:border-slate-800 ${className}`}
       style={{ paddingBottom: 'env(safe-area-inset-bottom, 0)' }}
     >
       <div className="flex items-center justify-around">
@@ -27,7 +28,11 @@ const MobileNav = ({ className = '' }) => {
               className={`
                 flex flex-col items-center justify-center py-2 px-3 min-w-[64px]
                 transition-colors duration-150
-                ${isActive ? 'text-blue-600' : 'text-gray-500 hover:text-blue-600'}
+                ${
+                  isActive
+                    ? 'text-blue-600 dark:text-blue-300'
+                    : 'text-gray-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-300'
+                }
               `}
             >
               <span className="text-xl mb-0.5">{item.icon}</span>

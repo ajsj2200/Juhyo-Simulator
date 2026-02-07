@@ -125,7 +125,7 @@ const SnowballAnimation = ({
 
   if (sortedRecords.length === 0) {
     return (
-      <div className="flex items-center justify-center h-64 bg-gradient-to-br from-sky-100 to-blue-200 rounded-2xl text-gray-500">
+      <div className="flex items-center justify-center h-64 bg-gradient-to-br from-sky-100 to-blue-200 rounded-2xl text-gray-500 dark:from-slate-900 dark:to-slate-800 dark:text-slate-200">
         <p>자산 기록을 추가하면 스노우볼 애니메이션이 시작됩니다 ❄️</p>
       </div>
     );
@@ -152,11 +152,14 @@ const SnowballAnimation = ({
   return (
     <div 
       ref={containerRef}
-      className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-sky-200 via-blue-100 to-indigo-200 border border-blue-300"
+      className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-sky-200 via-blue-100 to-indigo-200 border border-blue-300 dark:from-slate-900 dark:via-slate-800/90 dark:to-slate-800 dark:border-slate-700"
       style={{ height: '420px' }}
     >
       {/* 하늘 배경 */}
-      <div className="absolute inset-0 bg-gradient-to-b from-sky-300 via-sky-200 to-transparent" style={{ height: '50%' }} />
+      <div
+        className="absolute inset-0 bg-gradient-to-b from-sky-300 via-sky-200 to-transparent dark:from-slate-900 dark:via-slate-800/70"
+        style={{ height: '50%' }}
+      />
       
       {/* 눈 내리는 효과 */}
       {Array.from({ length: 20 }, (_, i) => (

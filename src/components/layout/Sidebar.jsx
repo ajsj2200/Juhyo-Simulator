@@ -51,10 +51,10 @@ const NavItem = ({ item, activeView, onViewChange, level = 0 }) => {
           ${level > 0 ? 'pl-10 text-sm' : ''}
           ${
             isActive
-              ? 'bg-blue-50 text-blue-700 font-medium'
+              ? 'bg-blue-50 text-blue-700 font-medium dark:bg-slate-800 dark:text-blue-200'
               : isParentActive
-                ? 'text-gray-800'
-                : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                ? 'text-gray-800 dark:text-slate-200'
+                : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100'
           }
           ${hasChildren ? 'cursor-default' : 'cursor-pointer'}
         `}
@@ -87,11 +87,14 @@ const Sidebar = ({ className = '' }) => {
     <aside
       className={`hidden lg:block fixed left-0 top-0 h-screen w-64
         bg-white/80 backdrop-blur-lg border-r border-gray-200
+        dark:bg-slate-900/80 dark:border-slate-800
         overflow-y-auto z-40 ${className}`}
     >
       {/* Header */}
-      <div className="h-16 flex items-center px-4 border-b border-gray-100">
-        <h1 className="text-lg font-bold text-gray-800">💰 인생 시뮬레이터</h1>
+      <div className="h-16 flex items-center px-4 border-b border-gray-100 dark:border-slate-800">
+        <h1 className="text-lg font-bold text-gray-800 dark:text-slate-100">
+          💰 인생 시뮬레이터
+        </h1>
       </div>
 
       {/* Navigation */}
@@ -107,8 +110,8 @@ const Sidebar = ({ className = '' }) => {
       </nav>
 
       {/* Footer */}
-      <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-100 bg-white/50">
-        <div className="text-xs text-gray-500 text-center">
+      <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-100 bg-white/50 dark:border-slate-800 dark:bg-slate-900/60">
+        <div className="text-xs text-gray-500 text-center dark:text-slate-400">
           주효 인생 시뮬레이터 v1.0
         </div>
       </div>

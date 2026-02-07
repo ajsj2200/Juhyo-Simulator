@@ -37,6 +37,7 @@ import {
   runMonteCarloPlan,
 } from '../utils/calculations';
 import { linearRegression } from '../utils/assetTracking';
+import { getInitialTheme, getNextTheme, THEME_STORAGE_KEY } from '../utils/theme';
 
 const LOCAL_PRESET_KEY = 'vooAppCustomPresetsV1';
 
@@ -59,6 +60,20 @@ const persistLocalPresets = (presets) => {
   } catch {
     // ignore
   }
+};
+
+const getBrowserStorage = () => {
+  if (typeof window === 'undefined') return null;
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+};
+
+const getBrowserMatchMedia = () => {
+  if (typeof window === 'undefined') return null;
+  return window.matchMedia;
 };
 
 const SimulatorContext = createContext(null);
@@ -102,6 +117,12 @@ export const SimulatorProvider = ({ children }) => {
   const [wealthChartHeight, setWealthChartHeight] = useState(480);
   const [showMCBands, setShowMCBands] = useState(true);
   const [portfolioMcChartHeight, setPortfolioMcChartHeight] = useState(240);
+  const [theme, setTheme] = useState(() =>
+    getInitialTheme({
+      storage: getBrowserStorage(),
+      matchMedia: getBrowserMatchMedia(),
+    })
+  );
 
   // Historical Mode
   const [useHistoricalReturns, setUseHistoricalReturns] = useState(false);
@@ -154,6 +175,21 @@ export const SimulatorProvider = ({ children }) => {
   // Load presets from localStorage
   useEffect(() => {
     setSavedPresets(loadLocalPresets());
+  }, []);
+
+  const toggleTheme = useCallback(() => {
+    setTheme((currentTheme) => {
+      const nextTheme = getNextTheme(currentTheme);
+      const storage = getBrowserStorage();
+      if (storage?.setItem) {
+        try {
+          storage.setItem(THEME_STORAGE_KEY, nextTheme);
+        } catch {
+          // ignore
+        }
+      }
+      return nextTheme;
+    });
   }, []);
 
   // Monte Carlo histogram calculation
@@ -1553,6 +1589,8 @@ ${chartDataWithMonteCarlo.map((data, idx) => {
     setShowMCBands,
     portfolioMcChartHeight,
     setPortfolioMcChartHeight,
+    theme,
+    toggleTheme,
 
     // Historical mode
     useHistoricalReturns,

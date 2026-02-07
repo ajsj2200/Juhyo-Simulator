@@ -10,12 +10,14 @@ const PersonCard = ({ person, setPerson, color, showRetirement = false }) => {
   };
 
   return (
-    <div className={`p-6 rounded-lg border-2 ${color} bg-white`}>
+    <div
+      className={`p-6 rounded-lg border-2 ${color} bg-white dark:bg-slate-900/80 dark:border-slate-700`}
+    >
       <input
         type="text"
         value={person.name}
         onChange={(e) => setPerson({ ...person, name: e.target.value })}
-        className="text-xl font-bold mb-4 w-full px-2 py-1 border-b-2 border-gray-300 focus:border-blue-500 focus:outline-none"
+        className="text-xl font-bold mb-4 w-full px-2 py-1 border-b-2 border-gray-300 focus:border-blue-500 focus:outline-none dark:bg-slate-900/60 dark:text-slate-100 dark:border-slate-600 dark:focus:border-blue-400"
       />
 
       <InputGroup
@@ -48,9 +50,11 @@ const PersonCard = ({ person, setPerson, color, showRetirement = false }) => {
         unit="만원/월"
       />
 
-      <div className="p-3 bg-blue-50 rounded mb-2">
-        <div className="text-sm text-gray-600">월 투자 가능액</div>
-        <div className="text-2xl font-bold text-blue-700">{person.monthly}만원</div>
+      <div className="p-3 bg-blue-50 rounded mb-2 dark:bg-slate-800/70">
+        <div className="text-sm text-gray-600 dark:text-slate-300">월 투자 가능액</div>
+        <div className="text-2xl font-bold text-blue-700 dark:text-blue-300">
+          {person.monthly}만원
+        </div>
       </div>
 
       <InputGroup
@@ -85,19 +89,21 @@ const PersonCard = ({ person, setPerson, color, showRetirement = false }) => {
         />
       )}
 
-      <div className="mt-4 p-3 bg-gray-50 rounded">
-        <div className="text-sm text-gray-600">저축률</div>
-        <div className="text-2xl font-bold text-blue-600">
+      <div className="mt-4 p-3 bg-gray-50 rounded dark:bg-slate-800/60">
+        <div className="text-sm text-gray-600 dark:text-slate-300">저축률</div>
+        <div className="text-2xl font-bold text-blue-600 dark:text-blue-300">
           {person.salary > 0 ? ((person.monthly / person.salary) * 100).toFixed(1) : 0}%
         </div>
       </div>
 
       <div className="mt-4">
         <div className="flex items-center justify-between mb-2">
-          <h4 className="text-sm font-semibold text-gray-700">저축 변경 스케줄</h4>
+          <h4 className="text-sm font-semibold text-gray-700 dark:text-slate-200">
+            저축 변경 스케줄
+          </h4>
           <button
             type="button"
-            className="text-xs px-2 py-1 rounded bg-blue-50 border border-blue-200 text-blue-700"
+            className="text-xs px-2 py-1 rounded bg-blue-50 border border-blue-200 text-blue-700 dark:bg-slate-800/70 dark:border-slate-600 dark:text-blue-300"
             onClick={() =>
               setPerson({
                 ...person,
@@ -112,13 +118,16 @@ const PersonCard = ({ person, setPerson, color, showRetirement = false }) => {
           </button>
         </div>
         {(person.adjustments || []).length === 0 && (
-          <div className="text-xs text-gray-500 bg-gray-50 p-2 rounded">
+          <div className="text-xs text-gray-500 bg-gray-50 p-2 rounded dark:text-slate-400 dark:bg-slate-800/60">
             특정 연도부터 투자액을 변경하려면 “+ 추가”를 눌러 입력하세요.
           </div>
         )}
         <div className="space-y-2">
           {(person.adjustments || []).map((adj, idx) => (
-            <div key={`${idx}-${adj.year}`} className="grid grid-cols-2 gap-2 items-end bg-gray-50 p-2 rounded">
+            <div
+              key={`${idx}-${adj.year}`}
+              className="grid grid-cols-2 gap-2 items-end bg-gray-50 p-2 rounded dark:bg-slate-800/60"
+            >
               <InputGroup
                 label="변경 시점(년 후)"
                 value={adj.year}
@@ -147,7 +156,7 @@ const PersonCard = ({ person, setPerson, color, showRetirement = false }) => {
               />
               <button
                 type="button"
-                className="col-span-2 text-xs text-red-600 hover:underline"
+                className="col-span-2 text-xs text-red-600 hover:underline dark:text-red-400"
                 onClick={() => {
                   const next = [...person.adjustments];
                   next.splice(idx, 1);

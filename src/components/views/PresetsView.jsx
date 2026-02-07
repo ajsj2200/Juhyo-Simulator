@@ -33,8 +33,8 @@ const PresetsView = () => {
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
-        <h1 className="text-heading-1 mb-2">프리셋 관리</h1>
-        <p className="text-body">현재 설정을 저장하고 불러올 수 있습니다.</p>
+        <h1 className="text-heading-1 mb-2 dark:text-slate-100">프리셋 관리</h1>
+        <p className="text-body dark:text-slate-300">현재 설정을 저장하고 불러올 수 있습니다.</p>
       </div>
 
       {/* Save or Update Preset */}
@@ -87,23 +87,23 @@ const PresetsView = () => {
             </div>
 
             {presetDiff.length > 0 ? (
-              <div className="overflow-hidden border border-gray-200 rounded-lg">
-                <table className="min-w-full divide-y divide-gray-200 text-xs">
-                  <thead className="bg-gray-50">
+              <div className="overflow-hidden border border-gray-200 rounded-lg dark:border-slate-700">
+                <table className="min-w-full divide-y divide-gray-200 text-xs dark:divide-slate-700">
+                  <thead className="bg-gray-50 dark:bg-slate-900/70">
                     <tr>
-                      <th className="px-3 py-2 text-left font-bold text-gray-500 uppercase tracking-wider">항목</th>
-                      <th className="px-3 py-2 text-left font-bold text-gray-500 uppercase tracking-wider">기존</th>
-                      <th className="px-3 py-2 text-left font-bold text-gray-500 uppercase tracking-wider">변경</th>
+                      <th className="px-3 py-2 text-left font-bold text-gray-500 uppercase tracking-wider dark:text-slate-300">항목</th>
+                      <th className="px-3 py-2 text-left font-bold text-gray-500 uppercase tracking-wider dark:text-slate-300">기존</th>
+                      <th className="px-3 py-2 text-left font-bold text-gray-500 uppercase tracking-wider dark:text-slate-300">변경</th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
+                  <tbody className="bg-white divide-y divide-gray-200 dark:bg-slate-900/50 dark:divide-slate-800">
                     {presetDiff.map((diff, idx) => (
-                      <tr key={idx}>
-                        <td className="px-3 py-2 font-medium text-gray-700">{diff.field}</td>
-                        <td className="px-3 py-2 text-red-600 bg-red-50/50">
+                      <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-slate-800/60">
+                        <td className="px-3 py-2 font-medium text-gray-700 dark:text-slate-200">{diff.field}</td>
+                        <td className="px-3 py-2 text-red-600 bg-red-50/50 dark:text-rose-300 dark:bg-rose-500/10">
                           <span className="line-through">{diff.old}{diff.unit}</span>
                         </td>
-                        <td className="px-3 py-2 text-green-700 bg-green-50/50 font-bold">
+                        <td className="px-3 py-2 text-green-700 bg-green-50/50 font-bold dark:text-emerald-300 dark:bg-emerald-500/10">
                           {typeof diff.new === 'number' ? `+${diff.new}` : diff.new}{diff.unit}
                         </td>
                       </tr>

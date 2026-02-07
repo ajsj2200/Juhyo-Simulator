@@ -85,17 +85,17 @@ const MarriagePlanSection = ({ marriagePlan, setMarriagePlan, personMonthly }) =
   };
 
   return (
-    <div className="bg-gradient-to-r from-pink-50 to-purple-50 p-6 rounded-lg shadow mb-8 border-2 border-pink-200">
+    <div className="bg-gradient-to-r from-pink-50 to-purple-50 p-6 rounded-lg shadow mb-8 border-2 border-pink-200 dark:from-slate-900/70 dark:to-slate-800/60 dark:border-slate-700">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-bold text-gray-800">💒 결혼 계획</h2>
+        <h2 className="text-xl font-bold text-gray-800 dark:text-slate-100">💒 결혼 계획</h2>
         <label className="flex items-center cursor-pointer">
           <input
             type="checkbox"
             checked={marriagePlan.enabled}
             onChange={(e) => setMarriagePlan({ ...marriagePlan, enabled: e.target.checked })}
-            className="w-5 h-5 text-pink-600 rounded focus:ring-pink-500"
+            className="w-5 h-5 text-pink-600 rounded focus:ring-pink-500 dark:bg-slate-900 dark:border-slate-600 dark:focus:ring-pink-400"
           />
-          <span className="ml-2 text-sm font-medium text-gray-700">활성화</span>
+          <span className="ml-2 text-sm font-medium text-gray-700 dark:text-slate-300">활성화</span>
         </label>
       </div>
 
@@ -103,7 +103,9 @@ const MarriagePlanSection = ({ marriagePlan, setMarriagePlan, personMonthly }) =
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* 기본 정보 */}
           <div className="space-y-4">
-            <h3 className="font-semibold text-gray-700 border-b pb-2">기본 정보</h3>
+            <h3 className="font-semibold text-gray-700 border-b pb-2 dark:text-slate-200 dark:border-slate-700">
+              기본 정보
+            </h3>
 
             <InputGroup
               label="결혼 시점"
@@ -115,8 +117,8 @@ const MarriagePlanSection = ({ marriagePlan, setMarriagePlan, personMonthly }) =
               unit="년 후"
             />
 
-            <div className="p-4 bg-white rounded-lg border border-pink-200">
-              <h4 className="font-semibold text-gray-700 mb-3">👫 배우자 정보</h4>
+            <div className="p-4 bg-white rounded-lg border border-pink-200 dark:bg-slate-900/60 dark:border-slate-700">
+              <h4 className="font-semibold text-gray-700 mb-3 dark:text-slate-200">👫 배우자 정보</h4>
 
               <InputGroup
                 label="배우자 이름"
@@ -158,9 +160,9 @@ const MarriagePlanSection = ({ marriagePlan, setMarriagePlan, personMonthly }) =
                 unit="만원/월"
               />
 
-              <div className="p-3 bg-purple-50 rounded mb-2">
-                <div className="text-sm text-gray-600">배우자 월 투자 가능액</div>
-                <div className="text-xl font-bold text-purple-700">
+              <div className="p-3 bg-purple-50 rounded mb-2 dark:bg-slate-800/70">
+                <div className="text-sm text-gray-600 dark:text-slate-300">배우자 월 투자 가능액</div>
+                <div className="text-xl font-bold text-purple-700 dark:text-purple-300">
                   {marriagePlan.spouse.monthly}만원
                 </div>
               </div>
@@ -195,9 +197,9 @@ const MarriagePlanSection = ({ marriagePlan, setMarriagePlan, personMonthly }) =
                 unit="년 후"
               />
 
-              <div className="mt-2 p-2 bg-gray-50 rounded text-sm">
-                <span className="text-gray-600">배우자 저축률: </span>
-                <span className="font-bold text-purple-600">
+              <div className="mt-2 p-2 bg-gray-50 rounded text-sm dark:bg-slate-800/60">
+                <span className="text-gray-600 dark:text-slate-300">배우자 저축률: </span>
+                <span className="font-bold text-purple-600 dark:text-purple-300">
                   {marriagePlan.spouse.salary > 0
                     ? ((marriagePlan.spouse.monthly / marriagePlan.spouse.salary) * 100).toFixed(1)
                     : 0}
@@ -207,23 +209,28 @@ const MarriagePlanSection = ({ marriagePlan, setMarriagePlan, personMonthly }) =
 
               <div className="mt-3">
                 <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-sm font-semibold text-gray-700">배우자 저축 변경</h4>
+                  <h4 className="text-sm font-semibold text-gray-700 dark:text-slate-200">
+                    배우자 저축 변경
+                  </h4>
                   <button
                     type="button"
-                    className="text-xs px-2 py-1 rounded bg-purple-50 border border-purple-200 text-purple-700"
+                    className="text-xs px-2 py-1 rounded bg-purple-50 border border-purple-200 text-purple-700 dark:bg-slate-800/70 dark:border-slate-600 dark:text-purple-300"
                     onClick={addSpouseAdjustment}
                   >
                     + 추가
                   </button>
                 </div>
                 {(marriagePlan.spouse.adjustments || []).length === 0 && (
-                  <div className="text-xs text-gray-500 bg-gray-50 p-2 rounded">
+                  <div className="text-xs text-gray-500 bg-gray-50 p-2 rounded dark:text-slate-400 dark:bg-slate-800/60">
                     특정 연도부터 투자액을 변경하려면 “+ 추가”를 눌러 입력하세요.
                   </div>
                 )}
                 <div className="space-y-2">
                   {(marriagePlan.spouse.adjustments || []).map((adj, idx) => (
-                    <div key={`${idx}-${adj.year}`} className="grid grid-cols-2 gap-2 items-end bg-gray-50 p-2 rounded">
+                    <div
+                      key={`${idx}-${adj.year}`}
+                      className="grid grid-cols-2 gap-2 items-end bg-gray-50 p-2 rounded dark:bg-slate-800/60"
+                    >
                       <InputGroup
                         label="변경 시점(년 후)"
                         value={adj.year}
@@ -252,7 +259,7 @@ const MarriagePlanSection = ({ marriagePlan, setMarriagePlan, personMonthly }) =
                       />
                       <button
                         type="button"
-                        className="col-span-2 text-xs text-red-600 hover:underline"
+                        className="col-span-2 text-xs text-red-600 hover:underline dark:text-red-400"
                         onClick={() => {
                           const next = [...marriagePlan.spouse.adjustments];
                           next.splice(idx, 1);
@@ -270,8 +277,8 @@ const MarriagePlanSection = ({ marriagePlan, setMarriagePlan, personMonthly }) =
 
           {/* 주택 대출 */}
           <div className="space-y-4">
-            <div className="flex items-center justify-between border-b pb-2">
-              <h3 className="font-semibold text-gray-700">🏠 주택 구매</h3>
+            <div className="flex items-center justify-between border-b pb-2 dark:border-slate-700">
+              <h3 className="font-semibold text-gray-700 dark:text-slate-200">🏠 주택 구매</h3>
               <label className="flex items-center cursor-pointer">
                 <input
                   type="checkbox"
@@ -279,9 +286,9 @@ const MarriagePlanSection = ({ marriagePlan, setMarriagePlan, personMonthly }) =
                   onChange={(e) =>
                     setMarriagePlan({ ...marriagePlan, buyHouse: e.target.checked })
                   }
-                  className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                  className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 dark:bg-slate-900 dark:border-slate-600 dark:focus:ring-blue-400"
                 />
-                <span className="ml-2 text-sm">집 구매</span>
+                <span className="ml-2 text-sm text-gray-700 dark:text-slate-300">집 구매</span>
               </label>
             </div>
 
@@ -296,7 +303,7 @@ const MarriagePlanSection = ({ marriagePlan, setMarriagePlan, personMonthly }) =
                   step={1}
                   unit="년 후"
                 />
-                <p className="text-xs text-gray-500 -mt-2 mb-2">
+                <p className="text-xs text-gray-500 -mt-2 mb-2 dark:text-slate-400">
                   * 0년 = 이미 집이 있거나 즉시 구매. 결혼과 별개로 설정 가능
                 </p>
 
@@ -320,18 +327,18 @@ const MarriagePlanSection = ({ marriagePlan, setMarriagePlan, personMonthly }) =
                   unit="만원"
                 />
 
-                <div className="p-3 bg-blue-50 rounded">
-                  <div className="flex justify-between text-sm text-gray-600">
+                <div className="p-3 bg-blue-50 rounded dark:bg-slate-800/70">
+                  <div className="flex justify-between text-sm text-gray-600 dark:text-slate-300">
                     <span>대출금액</span>
                     <span>LTV {(marriagePlan.housePrice > 0 ? (marriagePlan.loanAmount / marriagePlan.housePrice) * 100 : 0).toFixed(1)}%</span>
                   </div>
-                  <div className="text-xl font-bold text-blue-600">
+                  <div className="text-xl font-bold text-blue-600 dark:text-blue-300">
                     {marriagePlan.loanAmount.toLocaleString()}만원
-                    <span className="text-sm font-normal text-gray-500 ml-2">
+                    <span className="text-sm font-normal text-gray-500 ml-2 dark:text-slate-400">
                       ({(marriagePlan.loanAmount / 10000).toFixed(1)}억원)
                     </span>
                   </div>
-                  <div className="text-xs text-gray-600 mt-1">
+                  <div className="text-xs text-gray-600 mt-1 dark:text-slate-400">
                     자기자본: {marriagePlan.downPayment.toLocaleString()}만원 ({(marriagePlan.downPayment / 10000).toFixed(1)}억)
                   </div>
                 </div>
@@ -356,8 +363,8 @@ const MarriagePlanSection = ({ marriagePlan, setMarriagePlan, personMonthly }) =
                   unit="년"
                 />
 
-                <div className="flex items-center justify-between border-b pb-2">
-                  <h4 className="font-semibold text-gray-700">중도상환</h4>
+                <div className="flex items-center justify-between border-b pb-2 dark:border-slate-700">
+                  <h4 className="font-semibold text-gray-700 dark:text-slate-200">중도상환</h4>
                   <label className="flex items-center cursor-pointer">
                     <input
                       type="checkbox"
@@ -365,9 +372,11 @@ const MarriagePlanSection = ({ marriagePlan, setMarriagePlan, personMonthly }) =
                       onChange={(e) =>
                         setMarriagePlan({ ...marriagePlan, prepayEnabled: e.target.checked })
                       }
-                      className="w-4 h-4 text-amber-600 rounded focus:ring-amber-500"
+                      className="w-4 h-4 text-amber-600 rounded focus:ring-amber-500 dark:bg-slate-900 dark:border-slate-600 dark:focus:ring-amber-400"
                     />
-                    <span className="ml-2 text-sm text-amber-700">집 구매 후 일시 상환</span>
+                    <span className="ml-2 text-sm text-amber-700 dark:text-amber-300">
+                      집 구매 후 일시 상환
+                    </span>
                   </label>
                 </div>
 
@@ -387,9 +396,9 @@ const MarriagePlanSection = ({ marriagePlan, setMarriagePlan, personMonthly }) =
                       step={1}
                       unit="년 (집 구매 후)"
                     />
-                    <div className="p-3 bg-amber-50 rounded text-sm text-amber-800">
+                    <div className="p-3 bg-amber-50 rounded text-sm text-amber-800 dark:bg-slate-800/70 dark:text-amber-200">
                       예상 잔액: {prepayRemaining.toLocaleString()}만원
-                      <span className="text-xs text-gray-600 ml-2">
+                      <span className="text-xs text-gray-600 ml-2 dark:text-slate-400">
                         (대출 {marriagePlan.prepayYear}년차 기준)
                       </span>
                     </div>
@@ -407,7 +416,7 @@ const MarriagePlanSection = ({ marriagePlan, setMarriagePlan, personMonthly }) =
                 />
 
                 <div className="mb-3">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-slate-200">
                     상환 방식
                   </label>
                   <select
@@ -415,7 +424,7 @@ const MarriagePlanSection = ({ marriagePlan, setMarriagePlan, personMonthly }) =
                     onChange={(e) =>
                       setMarriagePlan({ ...marriagePlan, repaymentType: e.target.value })
                     }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:focus:ring-blue-400"
                   >
                     <option value="equalPayment">원리금균등 (매월 동일 납부)</option>
                     <option value="equalPrincipal">원금균등 (점차 감소)</option>
@@ -423,27 +432,27 @@ const MarriagePlanSection = ({ marriagePlan, setMarriagePlan, personMonthly }) =
                   </select>
                 </div>
 
-                <div className="p-3 bg-orange-50 rounded space-y-2">
+                <div className="p-3 bg-orange-50 rounded space-y-2 dark:bg-slate-800/60">
                   <div className="text-sm">
-                    <span className="text-gray-600">초기 월 상환액: </span>
-                    <span className="font-bold text-orange-600">
+                    <span className="text-gray-600 dark:text-slate-300">초기 월 상환액: </span>
+                    <span className="font-bold text-orange-600 dark:text-orange-300">
                       {initialMonthlyPayment.toFixed(0)}만원
                     </span>
                   </div>
                   {marriagePlan.repaymentType === 'equalPrincipal' && (
-                    <div className="text-xs text-gray-500">
+                    <div className="text-xs text-gray-500 dark:text-slate-400">
                       * 원금균등: 매월 원금 {(marriagePlan.loanAmount / marriagePlan.loanYears / 12).toFixed(0)}만원 상환,
                       이자는 점차 감소
                     </div>
                   )}
                   {marriagePlan.repaymentType === 'increasing' && (
-                    <div className="text-xs text-gray-500">
+                    <div className="text-xs text-gray-500 dark:text-slate-400">
                       * 체증식: 초기 이자 위주로 납부, 시간이 지날수록 원금 상환 증가
                     </div>
                   )}
                   <div className="text-sm">
-                    <span className="text-gray-600">대출 완료 시점: </span>
-                    <span className="font-bold text-green-600">
+                    <span className="text-gray-600 dark:text-slate-300">대출 완료 시점: </span>
+                    <span className="font-bold text-green-600 dark:text-green-300">
                       집 구매 {effectiveLoanYears}년 후
                       <span className="text-xs font-normal ml-1">
                         (투자 시작 {(marriagePlan.yearOfHousePurchase ?? marriagePlan.yearOfMarriage) + effectiveLoanYears}년 후)
@@ -458,26 +467,28 @@ const MarriagePlanSection = ({ marriagePlan, setMarriagePlan, personMonthly }) =
       )}
 
       {marriagePlan.enabled && (
-        <div className="mt-4 p-4 bg-white rounded-lg">
-          <h4 className="font-semibold text-gray-700 mb-2">📊 결혼 후 월 순저축</h4>
-          <div className="text-sm text-gray-600 space-y-1">
+        <div className="mt-4 p-4 bg-white rounded-lg dark:bg-slate-900/60">
+          <h4 className="font-semibold text-gray-700 mb-2 dark:text-slate-200">📊 결혼 후 월 순저축</h4>
+          <div className="text-sm text-gray-600 space-y-1 dark:text-slate-300">
             <p>• 본인 투자: +{personMonthly}만원</p>
             <p>• 배우자 투자: +{marriagePlan.spouse.monthly}만원</p>
             {marriagePlan.buyHouse && (
               <>
-                <p className="text-red-600">
+                <p className="text-red-600 dark:text-red-400">
                   • 대출 상환 (초기): -{initialMonthlyPayment.toFixed(0)}만원
                 </p>
-                <p className="font-bold text-lg pt-2 border-t">
+                <p className="font-bold text-lg pt-2 border-t dark:border-slate-700">
                   대출 중 순저축: {netSavingsDuringLoan.toFixed(0)}만원
                 </p>
-                <p className="font-bold text-lg text-green-600">
+                <p className="font-bold text-lg text-green-600 dark:text-green-300">
                   대출 완료 후: {netSavingsAfterLoan}만원
                 </p>
               </>
             )}
             {!marriagePlan.buyHouse && (
-              <p className="font-bold text-lg pt-2 border-t">합계: {netSavingsAfterLoan}만원</p>
+              <p className="font-bold text-lg pt-2 border-t dark:border-slate-700">
+                합계: {netSavingsAfterLoan}만원
+              </p>
             )}
           </div>
         </div>

@@ -19,8 +19,8 @@ const DashboardView = () => {
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
-        <h1 className="text-heading-1 mb-2">대시보드</h1>
-        <p className="text-body">주요 지표를 한눈에 확인하세요.</p>
+        <h1 className="text-heading-1 mb-2 dark:text-slate-100">대시보드</h1>
+        <p className="text-body dark:text-slate-300">주요 지표를 한눈에 확인하세요.</p>
       </div>
 
       {/* Quick Stats */}
@@ -52,11 +52,11 @@ const DashboardView = () => {
       </section>
 
       {/* Quick Insights */}
-      <section className="section-amber rounded-xl p-4">
-        <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+      <section className="section-amber rounded-xl p-4 dark:from-slate-900/80 dark:to-slate-800/70 dark:border-slate-700">
+        <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2 dark:text-slate-100">
           <span>💡</span> 핵심 인사이트
         </h3>
-        <div className="space-y-2 text-sm text-gray-700">
+        <div className="space-y-2 text-sm text-gray-700 dark:text-slate-300">
           <p>
             • <strong>{you.name}</strong>의 저축률: <span className="text-blue-600 font-medium">{youSavingsRate}%</span>
             {' '}vs <strong>{other.name}</strong>: <span className="text-red-600 font-medium">{otherSavingsRate}%</span>
@@ -86,14 +86,14 @@ const DashboardView = () => {
 
       {/* Setting Status */}
       <section>
-        <h3 className="text-heading-3 mb-3">현재 설정 상태</h3>
+        <h3 className="text-heading-3 mb-3 dark:text-slate-100">현재 설정 상태</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="p-4 bg-pink-50 rounded-lg border border-pink-200">
+          <div className="p-4 bg-pink-50 rounded-lg border border-pink-200 dark:bg-slate-900/60 dark:border-slate-700">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-xl">💒</span>
-              <span className="font-semibold text-gray-800">결혼/주택</span>
+              <span className="font-semibold text-gray-800 dark:text-slate-100">결혼/주택</span>
             </div>
-            <div className="text-sm text-gray-600">
+            <div className="text-sm text-gray-600 dark:text-slate-300">
               {marriagePlan.enabled ? (
                 <>
                   <p>✓ 활성화됨</p>
@@ -107,12 +107,12 @@ const DashboardView = () => {
             </div>
           </div>
 
-          <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+          <div className="p-4 bg-green-50 rounded-lg border border-green-200 dark:bg-slate-900/60 dark:border-slate-700">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-xl">🏖️</span>
-              <span className="font-semibold text-gray-800">은퇴 계획</span>
+              <span className="font-semibold text-gray-800 dark:text-slate-100">은퇴 계획</span>
             </div>
-            <div className="text-sm text-gray-600">
+            <div className="text-sm text-gray-600 dark:text-slate-300">
               {retirementPlan.enabled ? (
                 <>
                   <p>✓ 활성화됨</p>
@@ -124,12 +124,12 @@ const DashboardView = () => {
             </div>
           </div>
 
-          <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+          <div className="p-4 bg-blue-50 rounded-lg border border-blue-200 dark:bg-slate-900/60 dark:border-slate-700">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-xl">📊</span>
-              <span className="font-semibold text-gray-800">시뮬레이션</span>
+              <span className="font-semibold text-gray-800 dark:text-slate-100">시뮬레이션</span>
             </div>
-            <div className="text-sm text-gray-600">
+            <div className="text-sm text-gray-600 dark:text-slate-300">
               <p>기간: {years}년</p>
               <p className="text-xs mt-1">예상 수익률: {you.rate}%</p>
             </div>

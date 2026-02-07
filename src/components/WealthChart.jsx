@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useSimulator } from '../contexts/SimulatorContext';
 import {
   ComposedChart,
   Line,
@@ -33,8 +34,20 @@ const formatAxisTick = (value) => {
   return `${value.toFixed(2)}억`;
 };
 
-const CustomTooltip = ({ active, payload, label, showNoMarriageComparison = true }) => {
+const CustomTooltip = ({ active, payload, label, showNoMarriageComparison = true, isDark }) => {
   if (!active || !payload?.length) return null;
+
+  const containerClass = isDark
+    ? 'min-w-[200px] rounded-xl border border-slate-700 bg-slate-900/95 p-3 shadow-xl backdrop-blur-sm'
+    : 'min-w-[200px] rounded-xl border border-gray-200 bg-white/95 p-3 shadow-xl backdrop-blur-sm';
+  const titleClass = isDark
+    ? 'mb-2 border-b border-slate-700 pb-1 text-sm font-bold text-slate-200'
+    : 'mb-2 border-b border-gray-200 pb-1 text-sm font-bold text-gray-700';
+  const labelClass = isDark ? 'text-slate-300' : 'text-gray-600';
+  const valueClass = isDark ? 'text-slate-100' : 'text-gray-800';
+  const dividerClass = isDark ? 'border-slate-700' : 'border-gray-200';
+  const subtleClass = isDark ? 'text-slate-400' : 'text-gray-500';
+  const rangeClass = isDark ? 'text-slate-200' : 'text-gray-700';
 
   const byKey = (key) => payload.find((p) => p.dataKey === key);
   const extractDisplayValue = (item) => {
@@ -66,34 +79,34 @@ const CustomTooltip = ({ active, payload, label, showNoMarriageComparison = true
   const mcP90 = extractDisplayValue(byKey('mc_p90'));
 
   return (
-    <div className="min-w-[200px] rounded-xl border border-gray-200 bg-white/95 p-3 shadow-xl backdrop-blur-sm">
-      <div className="mb-2 border-b pb-1 text-sm font-bold text-gray-700">{label}년 후 자산</div>
+    <div className={containerClass}>
+      <div className={titleClass}>{label}년 후 자산</div>
       <div className="space-y-1.5">
         {rows.map((row) => (
           <div key={row.key} className="flex items-center justify-between text-sm">
-            <div className="flex items-center gap-2 text-gray-600">
+            <div className={`flex items-center gap-2 ${labelClass}`}>
               <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: row.color }} />
               {row.name}
             </div>
-            <span className="font-bold text-gray-800">{formatValue(row.value)}</span>
+            <span className={`font-bold ${valueClass}`}>{formatValue(row.value)}</span>
           </div>
         ))}
 
         {(mcP10 !== null && mcP10 !== undefined) ||
         (mcP50 !== null && mcP50 !== undefined) ||
         (mcP90 !== null && mcP90 !== undefined) ? (
-          <div className="pt-2 mt-2 border-t text-sm">
+          <div className={`pt-2 mt-2 border-t text-sm ${dividerClass}`}>
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-gray-600">
+              <div className={`flex items-center gap-2 ${labelClass}`}>
                 <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: '#d946ef' }} />
                 몬테카를로(중앙값)
               </div>
-              <span className="font-bold text-gray-800">{formatValue(mcP50 ?? null)}</span>
+              <span className={`font-bold ${valueClass}`}>{formatValue(mcP50 ?? null)}</span>
             </div>
             {mcP10 !== null && mcP10 !== undefined && mcP90 !== null && mcP90 !== undefined && (
-              <div className="flex items-center justify-between text-xs text-gray-500 mt-1">
+              <div className={`flex items-center justify-between text-xs mt-1 ${subtleClass}`}>
                 <span>범위(10~90%)</span>
-                <span className="font-medium text-gray-700">
+                <span className={`font-medium ${rangeClass}`}>
                   {formatValue(mcP10)} ~ {formatValue(mcP90)}
                 </span>
               </div>
@@ -112,16 +125,20 @@ const CustomLegend = ({
   monteCarloEnabled,
   useHouseInChart,
   showNoMarriageComparison = true,
+  isDark,
 }) => {
   const lastDataPoint = chartData?.[chartData.length - 1];
   if (!lastDataPoint) return null;
+
+  const legendTextClass = isDark ? 'text-slate-200' : 'text-gray-700';
+  const legendValueClass = isDark ? 'text-slate-100' : 'text-gray-800';
 
   const allowed = ['you', 'youNoMarriage', 'other', 'spouseWealth', 'house'];
   if (monteCarloEnabled) allowed.push('mc_p50');
   const legendItems = payload.filter((p) => allowed.includes(p.dataKey));
 
   return (
-    <div className="flex flex-wrap justify-center items-center gap-x-6 gap-y-2 mt-3 text-xs sm:text-sm text-gray-700">
+    <div className={`flex flex-wrap justify-center items-center gap-x-6 gap-y-2 mt-3 text-xs sm:text-sm ${legendTextClass}`}>
       {legendItems
         .filter((entry) => {
           if (!marriagePlan.enabled && entry.dataKey === 'youNoMarriage') return false;
@@ -146,7 +163,7 @@ const CustomLegend = ({
           <div key={`item-${dataKey}`} className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
             <span>{name}:</span>
-            <span className="font-bold text-gray-800">{formatValue(finalValue)}</span>
+            <span className={`font-bold ${legendValueClass}`}>{formatValue(finalValue)}</span>
           </div>
         );
       })}
@@ -179,6 +196,8 @@ const WealthChart = ({
   onToggleActualAssets,
   hasActualAssetData = false,
 }) => {
+  const { theme } = useSimulator();
+  const isDark = theme === 'dark';
   // 줌 상태 관리
   // left/right는 데이터의 key(여기서는 index)
   const [refAreaLeft, setRefAreaLeft] = useState('');
@@ -214,6 +233,10 @@ const WealthChart = ({
     setRefAreaLeft('');
     setRefAreaRight('');
   }, []);
+
+  const gridStroke = theme === 'dark' ? '#334155' : '#f1f5f9';
+  const axisStroke = theme === 'dark' ? '#475569' : '#e5e7eb';
+  const tickColor = theme === 'dark' ? '#cbd5e1' : '#6b7280';
 
   const effectiveRetireYear =
     marriagePlan.enabled && retirementPlan.enabled
@@ -467,28 +490,28 @@ const WealthChart = ({
             </linearGradient>
           </defs>
 
-          <CartesianGrid vertical={false} strokeDasharray="3 7" stroke="#f1f5f9" />
+          <CartesianGrid vertical={false} strokeDasharray="3 7" stroke={gridStroke} />
           <XAxis
             dataKey="year"
             type="number"
             domain={[left, right]}
-            tick={{ fill: '#6b7280', fontSize: 12 }}
+            tick={{ fill: tickColor, fontSize: 12 }}
             tickLine={false}
-            axisLine={{ stroke: '#e5e7eb' }}
+            axisLine={{ stroke: axisStroke }}
             tickFormatter={(val) => (val % 5 === 0 ? `${val}년` : '')}
-            label={{ value: '년', position: 'insideBottomRight', offset: -5, fill: '#6b7280' }}
+            label={{ value: '년', position: 'insideBottomRight', offset: -5, fill: tickColor }}
           />
           <YAxis
-            tick={{ fill: '#6b7280', fontSize: 12 }}
+            tick={{ fill: tickColor, fontSize: 12 }}
             tickLine={false}
-            axisLine={{ stroke: '#e5e7eb' }}
+            axisLine={{ stroke: axisStroke }}
             scale={useLogScale ? 'log' : 'linear'}
             domain={useLogScale ? [yDomainMin, 'auto'] : [dataMin < 0 ? dataMin * 1.1 : 0, 'auto']}
             allowDataOverflow={useLogScale}
             tickFormatter={formatAxisTick}
-            label={{ value: '자산 (억원)', angle: -90, position: 'insideLeft', fill: '#6b7280' }}
+            label={{ value: '자산 (억원)', angle: -90, position: 'insideLeft', fill: tickColor }}
           />
-          <Tooltip content={<CustomTooltip showNoMarriageComparison={showNoMarriageComparison} />} />
+          <Tooltip content={<CustomTooltip showNoMarriageComparison={showNoMarriageComparison} isDark={isDark} />} />
           <Legend
             content={
               <CustomLegend
@@ -497,6 +520,7 @@ const WealthChart = ({
                 monteCarloEnabled={monteCarloEnabled}
                 useHouseInChart={useHouseInChart}
                 showNoMarriageComparison={showNoMarriageComparison}
+                isDark={isDark}
               />
             }
             wrapperStyle={{ paddingTop: 20 }}

@@ -1,8 +1,10 @@
 import { useState, useCallback } from 'react';
 import { searchStocks, getStockInfo } from '../services/stockApiService';
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts';
+import { useSimulator } from '../contexts/SimulatorContext';
 
 const StockSearchModal = ({ isOpen, onClose, onAddStock }) => {
+  const { theme } = useSimulator();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [selectedStock, setSelectedStock] = useState(null);
@@ -12,6 +14,14 @@ const StockSearchModal = ({ isOpen, onClose, onAddStock }) => {
   const [allocation, setAllocation] = useState(10);
   const [error, setError] = useState(null);
   const [hasSearched, setHasSearched] = useState(false);
+
+  const chartColors = {
+    axis: theme === 'dark' ? '#475569' : '#e5e7eb',
+    tick: theme === 'dark' ? '#cbd5e1' : '#6b7280',
+    tooltipBg: theme === 'dark' ? 'rgba(15, 23, 42, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+    tooltipBorder: theme === 'dark' ? '#334155' : '#e5e7eb',
+    tooltipText: theme === 'dark' ? '#e2e8f0' : '#374151',
+  };
 
   // 검색 실행 함수
   const handleSearch = useCallback(async () => {
@@ -263,7 +273,9 @@ const StockSearchModal = ({ isOpen, onClose, onAddStock }) => {
                           <LineChart data={stockInfo.historicalData}>
                             <XAxis
                               dataKey="date"
-                              tick={{ fontSize: 10 }}
+                              tick={{ fontSize: 10, fill: chartColors.tick }}
+                              axisLine={{ stroke: chartColors.axis }}
+                              tickLine={{ stroke: chartColors.axis }}
                               tickFormatter={(val) => {
                                 const d = new Date(val);
                                 return `${d.getMonth() + 1}월`;
@@ -272,13 +284,18 @@ const StockSearchModal = ({ isOpen, onClose, onAddStock }) => {
                             />
                             <YAxis
                               domain={['auto', 'auto']}
-                              tick={{ fontSize: 10 }}
+                              tick={{ fontSize: 10, fill: chartColors.tick }}
+                              axisLine={{ stroke: chartColors.axis }}
+                              tickLine={{ stroke: chartColors.axis }}
                               tickFormatter={(val) => `$${val.toFixed(0)}`}
                               width={50}
                             />
                             <Tooltip
                               formatter={(value) => [`$${value.toFixed(2)}`, '가격']}
                               labelFormatter={(label) => new Date(label).toLocaleDateString('ko-KR')}
+                              contentStyle={{ backgroundColor: chartColors.tooltipBg, borderColor: chartColors.tooltipBorder }}
+                              labelStyle={{ color: chartColors.tooltipText }}
+                              itemStyle={{ color: chartColors.tooltipText }}
                             />
                             <Line
                               type="monotone"

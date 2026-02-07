@@ -47,9 +47,30 @@ const ResultsView = () => {
     setShowActualAssets,
     copyResults,
     copied,
+    theme,
   } = useSimulator();
   const [mcYear, setMcYear] = useState(years);
   const [portfolioMcYear, setPortfolioMcYear] = useState(years);
+
+  const isDark = theme === 'dark';
+  const chartColors = {
+    grid: theme === 'dark' ? '#334155' : '#e5e7eb',
+    axis: theme === 'dark' ? '#475569' : '#e5e7eb',
+    tick: theme === 'dark' ? '#cbd5e1' : '#6b7280',
+    tooltipBg: theme === 'dark' ? 'rgba(15, 23, 42, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+    tooltipBorder: theme === 'dark' ? '#334155' : '#e5e7eb',
+    tooltipText: theme === 'dark' ? '#e2e8f0' : '#374151',
+  };
+  const mcHistogramFill = theme === 'dark' ? '#818cf8' : '#6366f1';
+  const portfolioHistogramFill = theme === 'dark' ? '#c084fc' : '#a855f7';
+  const portfolioTooltipContainer = isDark
+    ? 'rounded-xl border border-slate-700 bg-slate-900/95 p-3 shadow-lg text-xs'
+    : 'rounded-xl border border-purple-200 bg-white/95 p-3 shadow-lg text-xs';
+  const portfolioTooltipTitle = isDark ? 'text-slate-200' : 'text-gray-800';
+  const portfolioTooltipText = isDark ? 'text-slate-300' : 'text-gray-600';
+  const portfolioTooltipP10 = isDark ? 'text-purple-300' : 'text-purple-700';
+  const portfolioTooltipP50 = isDark ? 'text-purple-100' : 'text-purple-900';
+  const portfolioTooltipP90 = isDark ? 'text-emerald-300' : 'text-emerald-700';
 
   const formatEok = (value) => {
     const n = Number(value);
@@ -388,9 +409,22 @@ const ResultsView = () => {
                 <div className="mt-3 h-56 bg-white/60 rounded-lg p-2">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={mcHistogramData} margin={{ top: 10, right: 10, left: 0, bottom: 40 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                      <XAxis dataKey="label" angle={-45} textAnchor="end" interval={0} height={60} tick={{ fontSize: 10 }} />
-                      <YAxis tick={{ fontSize: 10 }} />
+                      <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
+                      <XAxis
+                        dataKey="label"
+                        angle={-45}
+                        textAnchor="end"
+                        interval={0}
+                        height={60}
+                        tick={{ fontSize: 10, fill: chartColors.tick }}
+                        axisLine={{ stroke: chartColors.axis }}
+                        tickLine={{ stroke: chartColors.axis }}
+                      />
+                      <YAxis
+                        tick={{ fontSize: 10, fill: chartColors.tick }}
+                        axisLine={{ stroke: chartColors.axis }}
+                        tickLine={{ stroke: chartColors.axis }}
+                      />
                       <Tooltip
                         formatter={(v) => {
                           const count = Number(v) || 0;
@@ -398,8 +432,11 @@ const ResultsView = () => {
                           return [`${count}회 (${pct.toFixed(2)}%)`, '빈도'];
                         }}
                         labelFormatter={(l) => `구간: ${l}`}
+                        contentStyle={{ backgroundColor: chartColors.tooltipBg, borderColor: chartColors.tooltipBorder }}
+                        labelStyle={{ color: chartColors.tooltipText }}
+                        itemStyle={{ color: chartColors.tooltipText }}
                       />
-                      <Bar dataKey="count" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="count" fill={mcHistogramFill} radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -467,9 +504,22 @@ const ResultsView = () => {
                   <div className="mt-3 h-56 bg-white/60 rounded-lg p-2">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={portfolioMcHistogramData} margin={{ top: 10, right: 10, left: 0, bottom: 40 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                        <XAxis dataKey="label" angle={-45} textAnchor="end" interval={0} height={60} tick={{ fontSize: 10 }} />
-                        <YAxis tick={{ fontSize: 10 }} />
+                        <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
+                        <XAxis
+                          dataKey="label"
+                          angle={-45}
+                          textAnchor="end"
+                          interval={0}
+                          height={60}
+                          tick={{ fontSize: 10, fill: chartColors.tick }}
+                          axisLine={{ stroke: chartColors.axis }}
+                          tickLine={{ stroke: chartColors.axis }}
+                        />
+                        <YAxis
+                          tick={{ fontSize: 10, fill: chartColors.tick }}
+                          axisLine={{ stroke: chartColors.axis }}
+                          tickLine={{ stroke: chartColors.axis }}
+                        />
                         <Tooltip
                           formatter={(v) => {
                             const count = Number(v) || 0;
@@ -477,8 +527,11 @@ const ResultsView = () => {
                             return [`${count}회 (${pct.toFixed(2)}%)`, '빈도'];
                           }}
                           labelFormatter={(l) => `구간: ${l}`}
+                          contentStyle={{ backgroundColor: chartColors.tooltipBg, borderColor: chartColors.tooltipBorder }}
+                          labelStyle={{ color: chartColors.tooltipText }}
+                          itemStyle={{ color: chartColors.tooltipText }}
                         />
-                        <Bar dataKey="count" fill="#a855f7" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="count" fill={portfolioHistogramFill} radius={[4, 4, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -499,9 +552,20 @@ const ResultsView = () => {
                           <stop offset="95%" stopColor="#a78bfa" stopOpacity={0.1} />
                         </linearGradient>
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                      <XAxis dataKey="year" tickFormatter={(v) => `${v}년`} tick={{ fontSize: 10 }} />
-                      <YAxis tickFormatter={(v) => `${v?.toFixed(0) || 0}억`} tick={{ fontSize: 10 }} />
+                      <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
+                      <XAxis
+                        dataKey="year"
+                        tickFormatter={(v) => `${v}년`}
+                        tick={{ fontSize: 10, fill: chartColors.tick }}
+                        axisLine={{ stroke: chartColors.axis }}
+                        tickLine={{ stroke: chartColors.axis }}
+                      />
+                      <YAxis
+                        tickFormatter={(v) => `${v?.toFixed(0) || 0}억`}
+                        tick={{ fontSize: 10, fill: chartColors.tick }}
+                        axisLine={{ stroke: chartColors.axis }}
+                        tickLine={{ stroke: chartColors.axis }}
+                      />
                       <Tooltip
                         content={({ active, payload, label }) => {
                           if (!active || !payload?.length) return null;
@@ -509,12 +573,21 @@ const ResultsView = () => {
                           if (!row) return null;
                           const fmt = (v) => (v === null || v === undefined ? '-' : `${v.toFixed(2)}억`);
                           return (
-                            <div className="rounded-xl border border-purple-200 bg-white/95 p-3 shadow-lg text-xs">
-                              <div className="font-semibold text-gray-800 mb-1">{label}년 후</div>
-                              <div className="space-y-0.5 text-gray-600">
-                                <div className="flex justify-between gap-3"><span>p10</span><span className="font-bold text-purple-700">{fmt(row.p10)}</span></div>
-                                <div className="flex justify-between gap-3"><span>p50</span><span className="font-bold text-purple-900">{fmt(row.p50)}</span></div>
-                                <div className="flex justify-between gap-3"><span>p90</span><span className="font-bold text-emerald-700">{fmt(row.p90)}</span></div>
+                            <div className={portfolioTooltipContainer}>
+                              <div className={`font-semibold mb-1 ${portfolioTooltipTitle}`}>{label}년 후</div>
+                              <div className={`space-y-0.5 ${portfolioTooltipText}`}>
+                                <div className="flex justify-between gap-3">
+                                  <span>p10</span>
+                                  <span className={`font-bold ${portfolioTooltipP10}`}>{fmt(row.p10)}</span>
+                                </div>
+                                <div className="flex justify-between gap-3">
+                                  <span>p50</span>
+                                  <span className={`font-bold ${portfolioTooltipP50}`}>{fmt(row.p50)}</span>
+                                </div>
+                                <div className="flex justify-between gap-3">
+                                  <span>p90</span>
+                                  <span className={`font-bold ${portfolioTooltipP90}`}>{fmt(row.p90)}</span>
+                                </div>
                               </div>
                             </div>
                           );

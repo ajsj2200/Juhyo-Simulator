@@ -201,16 +201,32 @@ const PortfolioSection = ({ portfolio, setPortfolio }) => {
   }, [localAllocations, customStocksTotal]);
 
   const volatilityLabels = {
-    'very-low': { text: '매우 낮음', color: 'text-green-600', bg: 'bg-green-100' },
-    low: { text: '낮음', color: 'text-green-500', bg: 'bg-green-50' },
-    medium: { text: '중간', color: 'text-yellow-600', bg: 'bg-yellow-100' },
-    high: { text: '높음', color: 'text-red-500', bg: 'bg-red-50' },
+    'very-low': {
+      text: '매우 낮음',
+      color: 'text-green-600 dark:text-green-300',
+      bg: 'bg-green-100 dark:bg-green-900/40',
+    },
+    low: {
+      text: '낮음',
+      color: 'text-green-500 dark:text-green-300',
+      bg: 'bg-green-50 dark:bg-green-900/30',
+    },
+    medium: {
+      text: '중간',
+      color: 'text-yellow-600 dark:text-yellow-300',
+      bg: 'bg-yellow-100 dark:bg-yellow-900/40',
+    },
+    high: {
+      text: '높음',
+      color: 'text-red-500 dark:text-red-300',
+      bg: 'bg-red-50 dark:bg-red-900/30',
+    },
   };
 
   const volLabel = volatilityLabels[totalVolatilityLevel];
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow border border-gray-100">
+    <div className="bg-white p-6 rounded-lg shadow border border-gray-100 dark:bg-slate-900/80 dark:border-slate-700">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <input
@@ -218,9 +234,9 @@ const PortfolioSection = ({ portfolio, setPortfolio }) => {
             id="portfolioEnabled"
             checked={portfolio.enabled}
             onChange={(e) => setPortfolio({ ...portfolio, enabled: e.target.checked })}
-            className="w-5 h-5 text-blue-600 rounded"
+            className="w-5 h-5 text-blue-600 rounded dark:bg-slate-900 dark:border-slate-600"
           />
-          <label htmlFor="portfolioEnabled" className="text-lg font-bold text-gray-800">
+          <label htmlFor="portfolioEnabled" className="text-lg font-bold text-gray-800 dark:text-slate-100">
             📊 포트폴리오 구성
           </label>
         </div>
@@ -232,7 +248,7 @@ const PortfolioSection = ({ portfolio, setPortfolio }) => {
       </div>
 
       {!portfolio.enabled && (
-        <p className="text-sm text-gray-500 mb-4">
+        <p className="text-sm text-gray-500 mb-4 dark:text-slate-400">
           체크하면 VOO 단일 투자 대신 여러 자산을 혼합한 포트폴리오를 구성할 수 있습니다.
         </p>
       )}
@@ -240,16 +256,16 @@ const PortfolioSection = ({ portfolio, setPortfolio }) => {
       {portfolio.enabled && (
         <>
           {/* 투자 방식 토글 */}
-          <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+          <div className="mb-4 p-3 bg-gray-50 rounded-lg dark:bg-slate-800/60">
             <div className="flex items-center justify-between">
-              <div className="text-sm font-semibold text-gray-700">투자 방식</div>
-              <div className="flex items-center gap-2 bg-white rounded-lg p-1 border border-gray-200">
+              <div className="text-sm font-semibold text-gray-700 dark:text-slate-200">투자 방식</div>
+              <div className="flex items-center gap-2 bg-white rounded-lg p-1 border border-gray-200 dark:bg-slate-900/70 dark:border-slate-700">
                 <button
                   onClick={() => setPortfolio({ ...portfolio, useAmountMode: false })}
                   className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${
                     !useAmountMode 
-                      ? 'bg-blue-500 text-white' 
-                      : 'text-gray-600 hover:bg-gray-100'
+                      ? 'bg-blue-500 text-white dark:bg-blue-600' 
+                      : 'text-gray-600 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-800'
                   }`}
                 >
                   비율 %
@@ -258,8 +274,8 @@ const PortfolioSection = ({ portfolio, setPortfolio }) => {
                   onClick={() => setPortfolio({ ...portfolio, useAmountMode: true })}
                   className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${
                     useAmountMode 
-                      ? 'bg-blue-500 text-white' 
-                      : 'text-gray-600 hover:bg-gray-100'
+                      ? 'bg-blue-500 text-white dark:bg-blue-600' 
+                      : 'text-gray-600 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-800'
                   }`}
                 >
                   금액 만원
@@ -267,7 +283,7 @@ const PortfolioSection = ({ portfolio, setPortfolio }) => {
               </div>
             </div>
             {useAmountMode && (
-              <div className="text-xs text-gray-500 mt-2">
+              <div className="text-xs text-gray-500 mt-2 dark:text-slate-400">
                 각 종목에 월별로 투자할 금액을 직접 입력하세요. 비율은 자동 계산됩니다.
               </div>
             )}
@@ -276,13 +292,13 @@ const PortfolioSection = ({ portfolio, setPortfolio }) => {
           {/* 프리셋 버튼 */}
           {!useAmountMode && (
             <div className="mb-4">
-              <div className="text-sm font-semibold text-gray-700 mb-2">빠른 설정</div>
+              <div className="text-sm font-semibold text-gray-700 mb-2 dark:text-slate-200">빠른 설정</div>
               <div className="flex flex-wrap gap-2">
                 {Object.entries(PORTFOLIO_PRESETS).map(([key, preset]) => (
                   <button
                     key={key}
                     onClick={() => applyPreset(key)}
-                    className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition"
+                    className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition dark:border-slate-700 dark:text-slate-200 dark:hover:border-blue-500 dark:hover:bg-slate-800"
                     title={preset.description}
                   >
                     {preset.name}
@@ -308,7 +324,9 @@ const PortfolioSection = ({ portfolio, setPortfolio }) => {
                     className="w-3 h-3 rounded-full"
                     style={{ backgroundColor: info.color }}
                   />
-                  <div className="w-16 text-sm font-medium text-gray-700">{info.name}</div>
+                  <div className="w-16 text-sm font-medium text-gray-700 dark:text-slate-200">
+                    {info.name}
+                  </div>
                   
                   {useAmountMode ? (
                     // 금액 모드
@@ -326,10 +344,10 @@ const PortfolioSection = ({ portfolio, setPortfolio }) => {
                             monthlyAmounts: newAmounts,
                           });
                         }}
-                        className="w-24 px-3 py-1.5 text-sm border border-gray-300 rounded-lg text-right font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-24 px-3 py-1.5 text-sm border border-gray-300 rounded-lg text-right font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                       />
-                      <span className="text-sm text-gray-500">만원</span>
-                      <div className="w-12 text-right text-xs text-gray-400">
+                      <span className="text-sm text-gray-500 dark:text-slate-400">만원</span>
+                      <div className="w-12 text-right text-xs text-gray-400 dark:text-slate-500">
                         ({calculatedPercent}%)
                       </div>
                     </>
@@ -366,12 +384,18 @@ const PortfolioSection = ({ portfolio, setPortfolio }) => {
                 : 0;
 
               return (
-                <div key={stock.ticker} className="flex items-center gap-3 bg-gradient-to-r from-purple-50 to-transparent p-2 -mx-2 rounded-lg">
+                <div
+                  key={stock.ticker}
+                  className="flex items-center gap-3 bg-gradient-to-r from-purple-50 to-transparent p-2 -mx-2 rounded-lg dark:from-slate-900/60 dark:to-slate-900/20"
+                >
                   <div
                     className="w-3 h-3 rounded-full"
                     style={{ backgroundColor: stock.color }}
                   />
-                  <div className="w-16 text-sm font-medium text-gray-700 truncate" title={stock.name}>
+                  <div
+                    className="w-16 text-sm font-medium text-gray-700 truncate dark:text-slate-200"
+                    title={stock.name}
+                  >
                     {stock.ticker}
                   </div>
                   
@@ -391,10 +415,10 @@ const PortfolioSection = ({ portfolio, setPortfolio }) => {
                             ),
                           });
                         }}
-                        className="w-24 px-3 py-1.5 text-sm border border-gray-300 rounded-lg text-right font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-24 px-3 py-1.5 text-sm border border-gray-300 rounded-lg text-right font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                       />
-                      <span className="text-sm text-gray-500">만원</span>
-                      <div className="w-12 text-right text-xs text-gray-400">
+                      <span className="text-sm text-gray-500 dark:text-slate-400">만원</span>
+                      <div className="w-12 text-right text-xs text-gray-400 dark:text-slate-500">
                         ({calculatedPercent}%)
                       </div>
                     </>
@@ -425,7 +449,7 @@ const PortfolioSection = ({ portfolio, setPortfolio }) => {
                         customStocks: customStocks.filter((s) => s.ticker !== stock.ticker),
                       });
                     }}
-                    className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition"
+                    className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition dark:text-slate-500 dark:hover:text-red-400 dark:hover:bg-slate-800"
                     title="삭제"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -439,7 +463,7 @@ const PortfolioSection = ({ portfolio, setPortfolio }) => {
             {/* 종목 추가 버튼 */}
             <button
               onClick={() => setIsSearchModalOpen(true)}
-              className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-500 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition flex items-center justify-center gap-2"
+              className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-500 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition flex items-center justify-center gap-2 dark:border-slate-700 dark:text-slate-400 dark:hover:border-blue-500 dark:hover:text-blue-300 dark:hover:bg-slate-800"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -451,22 +475,22 @@ const PortfolioSection = ({ portfolio, setPortfolio }) => {
           {/* 합계 표시 */}
           {useAmountMode ? (
             // 금액 모드 합계
-            <div className="flex justify-between items-center p-3 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg mb-4">
-              <span className="text-sm font-semibold text-gray-700">월 총 투자금액</span>
-              <span className="text-xl font-bold text-blue-600">
+            <div className="flex justify-between items-center p-3 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg mb-4 dark:from-slate-900/70 dark:to-slate-800/50">
+              <span className="text-sm font-semibold text-gray-700 dark:text-slate-200">월 총 투자금액</span>
+              <span className="text-xl font-bold text-blue-600 dark:text-blue-300">
                 {Object.values(localMonthlyAmounts).reduce((a, b) => a + b, 0) + 
                   customStocks.reduce((sum, s) => sum + (s.monthlyAmount || 0), 0)}만원
               </span>
             </div>
           ) : (
             // 비율 모드 합계
-            <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg mb-4">
-              <span className="text-sm text-gray-600">합계</span>
+            <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg mb-4 dark:bg-slate-800/60">
+              <span className="text-sm text-gray-600 dark:text-slate-300">합계</span>
               <span
                 className={`text-lg font-bold ${
                   Object.values(localAllocations).reduce((a, b) => a + b, 0) + customStocks.reduce((sum, s) => sum + s.allocation, 0) === 100
-                    ? 'text-green-600'
-                    : 'text-red-600'
+                    ? 'text-green-600 dark:text-green-300'
+                    : 'text-red-600 dark:text-red-400'
                 }`}
               >
                 {Object.values(localAllocations).reduce((a, b) => a + b, 0) + customStocks.reduce((sum, s) => sum + s.allocation, 0)}%
@@ -476,17 +500,17 @@ const PortfolioSection = ({ portfolio, setPortfolio }) => {
 
           {/* 예상 수익률 및 표준편차 */}
           <div className="grid grid-cols-3 gap-3 mb-4">
-            <div className="p-3 bg-blue-50 rounded-lg">
-              <div className="text-xs text-gray-600">예상 수익률</div>
-              <div className="text-lg font-bold text-blue-700">{totalExpectedReturn.toFixed(1)}%</div>
+            <div className="p-3 bg-blue-50 rounded-lg dark:bg-slate-800/70">
+              <div className="text-xs text-gray-600 dark:text-slate-300">예상 수익률</div>
+              <div className="text-lg font-bold text-blue-700 dark:text-blue-300">{totalExpectedReturn.toFixed(1)}%</div>
             </div>
-            <div className="p-3 bg-orange-50 rounded-lg">
-              <div className="text-xs text-gray-600">표준편차 (σ)</div>
-              <div className="text-lg font-bold text-orange-700">{totalStdDev.toFixed(1)}%</div>
+            <div className="p-3 bg-orange-50 rounded-lg dark:bg-slate-800/70">
+              <div className="text-xs text-gray-600 dark:text-slate-300">표준편차 (σ)</div>
+              <div className="text-lg font-bold text-orange-700 dark:text-orange-300">{totalStdDev.toFixed(1)}%</div>
             </div>
-            <div className="p-3 bg-green-50 rounded-lg">
-              <div className="text-xs text-gray-600">주식 비중</div>
-              <div className="text-lg font-bold text-green-700">
+            <div className="p-3 bg-green-50 rounded-lg dark:bg-slate-800/70">
+              <div className="text-xs text-gray-600 dark:text-slate-300">주식 비중</div>
+              <div className="text-lg font-bold text-green-700 dark:text-green-300">
                 {localAllocations.voo + localAllocations.schd + customStocksTotal}%
               </div>
             </div>
@@ -524,7 +548,7 @@ const PortfolioSection = ({ portfolio, setPortfolio }) => {
           </div>
 
           {/* 자산 설명 */}
-          <div className="grid grid-cols-2 gap-2 text-xs text-gray-600 mb-4">
+          <div className="grid grid-cols-2 gap-2 text-xs text-gray-600 mb-4 dark:text-slate-300">
             {Object.entries(ASSET_INFO).map(([key, info]) => (
               <div key={key} className="flex items-center gap-1">
                 <div
@@ -550,12 +574,16 @@ const PortfolioSection = ({ portfolio, setPortfolio }) => {
 
           {/* 커스텀 주식 상세 설정 */}
           {customStocks.length > 0 && (
-            <div className="pt-4 border-t border-gray-100 mb-4">
-              <div className="text-sm font-semibold text-gray-700 mb-3">📊 추가 종목 상세 설정</div>
-              <div className="text-xs text-gray-500 mb-2">보유 금액, 수익률, 변동성을 설정하세요.</div>
+            <div className="pt-4 border-t border-gray-100 mb-4 dark:border-slate-700">
+              <div className="text-sm font-semibold text-gray-700 mb-3 dark:text-slate-200">
+                📊 추가 종목 상세 설정
+              </div>
+              <div className="text-xs text-gray-500 mb-2 dark:text-slate-400">
+                보유 금액, 수익률, 변동성을 설정하세요.
+              </div>
               <div className="space-y-3">
                 {customStocks.map((stock) => (
-                  <div key={stock.ticker} className="p-3 bg-gray-50 rounded-lg">
+                  <div key={stock.ticker} className="p-3 bg-gray-50 rounded-lg dark:bg-slate-800/60">
                     <div className="flex items-center gap-3 mb-2">
                       <div
                         className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-xs"
@@ -564,15 +592,19 @@ const PortfolioSection = ({ portfolio, setPortfolio }) => {
                         {stock.ticker.slice(0, 2)}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-gray-900 text-sm">{stock.ticker}</div>
-                        <div className="text-xs text-gray-500 truncate">{stock.name}</div>
+                        <div className="font-semibold text-gray-900 text-sm dark:text-slate-100">
+                          {stock.ticker}
+                        </div>
+                        <div className="text-xs text-gray-500 truncate dark:text-slate-400">
+                          {stock.name}
+                        </div>
                       </div>
                     </div>
                     
                     {/* 보유금액 & 월 투자금액 */}
                     <div className="grid grid-cols-2 gap-3 mb-2">
                       <div className="flex items-center gap-2">
-                        <div className="text-xs text-gray-500 w-16">현재 보유</div>
+                        <div className="text-xs text-gray-500 w-16 dark:text-slate-400">현재 보유</div>
                         <input
                           type="number"
                           value={stock.initialAmount ?? 0}
@@ -585,12 +617,12 @@ const PortfolioSection = ({ portfolio, setPortfolio }) => {
                               ),
                             });
                           }}
-                          className="w-20 px-2 py-1 text-sm border border-gray-300 rounded text-right font-medium"
+                          className="w-20 px-2 py-1 text-sm border border-gray-300 rounded text-right font-medium dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                         />
-                        <span className="text-xs text-gray-500">만원</span>
+                        <span className="text-xs text-gray-500 dark:text-slate-400">만원</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <div className="text-xs text-gray-500 w-16">월 투자</div>
+                        <div className="text-xs text-gray-500 w-16 dark:text-slate-400">월 투자</div>
                         <input
                           type="number"
                           value={stock.monthlyAmount ?? 0}
@@ -603,16 +635,16 @@ const PortfolioSection = ({ portfolio, setPortfolio }) => {
                               ),
                             });
                           }}
-                          className="w-20 px-2 py-1 text-sm border border-gray-300 rounded text-right font-medium"
+                          className="w-20 px-2 py-1 text-sm border border-gray-300 rounded text-right font-medium dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                         />
-                        <span className="text-xs text-gray-500">만원</span>
+                        <span className="text-xs text-gray-500 dark:text-slate-400">만원</span>
                       </div>
                     </div>
                     
                     {/* 수익률 & 변동성 */}
                     <div className="grid grid-cols-2 gap-3">
                       <div className="flex items-center gap-2">
-                        <div className="text-xs text-gray-500 w-16">수익률</div>
+                        <div className="text-xs text-gray-500 w-16 dark:text-slate-400">수익률</div>
                         <input
                           type="number"
                           value={stock.expectedReturn ?? 0}
@@ -625,13 +657,13 @@ const PortfolioSection = ({ portfolio, setPortfolio }) => {
                               ),
                             });
                           }}
-                          className="w-20 px-2 py-1 text-sm border border-gray-300 rounded text-right font-medium"
+                          className="w-20 px-2 py-1 text-sm border border-gray-300 rounded text-right font-medium dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                           step="0.1"
                         />
-                        <span className="text-xs text-gray-500">%</span>
+                        <span className="text-xs text-gray-500 dark:text-slate-400">%</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <div className="text-xs text-gray-500 w-16">변동성</div>
+                        <div className="text-xs text-gray-500 w-16 dark:text-slate-400">변동성</div>
                         <input
                           type="number"
                           value={stock.stdDev ?? 0}
@@ -644,10 +676,10 @@ const PortfolioSection = ({ portfolio, setPortfolio }) => {
                               ),
                             });
                           }}
-                          className="w-20 px-2 py-1 text-sm border border-gray-300 rounded text-right font-medium"
+                          className="w-20 px-2 py-1 text-sm border border-gray-300 rounded text-right font-medium dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                           step="0.1"
                         />
-                        <span className="text-xs text-gray-500">%</span>
+                        <span className="text-xs text-gray-500 dark:text-slate-400">%</span>
                       </div>
                     </div>
                   </div>
@@ -657,7 +689,7 @@ const PortfolioSection = ({ portfolio, setPortfolio }) => {
           )}
 
           {/* 옵션들 */}
-          <div className="pt-4 border-t border-gray-100 space-y-3">
+          <div className="pt-4 border-t border-gray-100 space-y-3 dark:border-slate-700">
             {/* 리밸런싱 옵션 */}
             <div className="flex items-center gap-3">
               <input
@@ -667,16 +699,16 @@ const PortfolioSection = ({ portfolio, setPortfolio }) => {
                 onChange={(e) =>
                   setPortfolio({ ...portfolio, rebalanceEnabled: e.target.checked })
                 }
-                className="w-4 h-4 text-blue-600 rounded"
+                className="w-4 h-4 text-blue-600 rounded dark:bg-slate-900 dark:border-slate-600"
               />
-              <label htmlFor="rebalanceEnabled" className="text-sm text-gray-700">
+              <label htmlFor="rebalanceEnabled" className="text-sm text-gray-700 dark:text-slate-300">
                 자동 리밸런싱
               </label>
               {rebalanceEnabled && (
                 <select
                   value={rebalanceFrequency}
                   onChange={(e) => setPortfolio({ ...portfolio, rebalanceFrequency: Number(e.target.value) })}
-                  className="ml-auto px-2 py-1 text-sm border border-gray-300 rounded"
+                  className="ml-auto px-2 py-1 text-sm border border-gray-300 rounded dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                 >
                   <option value={1}>매월</option>
                   <option value={3}>분기별</option>
@@ -695,16 +727,16 @@ const PortfolioSection = ({ portfolio, setPortfolio }) => {
                 onChange={(e) =>
                   setPortfolio({ ...portfolio, monteCarloEnabled: e.target.checked })
                 }
-                className="w-4 h-4 text-purple-600 rounded"
+                className="w-4 h-4 text-purple-600 rounded dark:bg-slate-900 dark:border-slate-600"
               />
-              <label htmlFor="monteCarloEnabled" className="text-sm text-gray-700">
+              <label htmlFor="monteCarloEnabled" className="text-sm text-gray-700 dark:text-slate-300">
                 🎲 몬테카를로 시뮬레이션
               </label>
-              <span className="text-xs text-gray-500">(변동성 밴드 표시)</span>
+              <span className="text-xs text-gray-500 dark:text-slate-400">(변동성 밴드 표시)</span>
             </div>
             {monteCarloEnabled && (
               <>
-                <div className="pl-7 text-xs text-purple-600 bg-purple-50 p-2 rounded mb-3">
+                <div className="pl-7 text-xs text-purple-600 bg-purple-50 p-2 rounded mb-3 dark:bg-slate-800/60 dark:text-purple-300">
                   500~20,000회 시뮬레이션으로 10~90% 확률 범위를 표시합니다.
                 </div>
                 <div className="pl-7 grid grid-cols-1 sm:grid-cols-2 gap-3">

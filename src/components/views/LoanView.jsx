@@ -4,7 +4,18 @@ import InputGroup from '../InputGroup';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 
 const LoanView = () => {
-  const { loanCalc, setLoanCalc, loanCalcResult, loanChartData } = useSimulator();
+  const { loanCalc, setLoanCalc, loanCalcResult, loanChartData, theme } = useSimulator();
+
+  const chartColors = {
+    grid: theme === 'dark' ? '#334155' : '#e5e7eb',
+    axis: theme === 'dark' ? '#475569' : '#e5e7eb',
+    tick: theme === 'dark' ? '#cbd5e1' : '#6b7280',
+    tooltipBg: theme === 'dark' ? 'rgba(15, 23, 42, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+    tooltipBorder: theme === 'dark' ? '#334155' : '#e5e7eb',
+    tooltipText: theme === 'dark' ? '#e2e8f0' : '#374151',
+    nominalLine: theme === 'dark' ? '#60a5fa' : '#2563eb',
+    realLine: theme === 'dark' ? '#fdba74' : '#f97316',
+  };
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -99,16 +110,20 @@ const LoanView = () => {
             <div className="h-56">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={loanChartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
+                  <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
                   <XAxis
                     dataKey="month"
-                    tick={{ fontSize: 10 }}
-                    label={{ value: '개월', position: 'insideBottomRight', offset: -5, fontSize: 11 }}
+                    tick={{ fontSize: 10, fill: chartColors.tick }}
+                    axisLine={{ stroke: chartColors.axis }}
+                    tickLine={{ stroke: chartColors.axis }}
+                    label={{ value: '개월', position: 'insideBottomRight', offset: -5, fontSize: 11, fill: chartColors.tick }}
                   />
                   <YAxis
-                    tick={{ fontSize: 10 }}
+                    tick={{ fontSize: 10, fill: chartColors.tick }}
+                    axisLine={{ stroke: chartColors.axis }}
+                    tickLine={{ stroke: chartColors.axis }}
                     tickFormatter={(v) => v.toFixed(0)}
-                    label={{ value: '상환액(만원)', angle: -90, position: 'insideLeft', fontSize: 11 }}
+                    label={{ value: '상환액(만원)', angle: -90, position: 'insideLeft', fontSize: 11, fill: chartColors.tick }}
                   />
                   <Tooltip
                     formatter={(value, _name, props) => [
@@ -116,11 +131,14 @@ const LoanView = () => {
                       props?.dataKey === 'payment' ? '명목' : '실질',
                     ]}
                     labelFormatter={(l) => `${l}개월차`}
+                    contentStyle={{ backgroundColor: chartColors.tooltipBg, borderColor: chartColors.tooltipBorder }}
+                    labelStyle={{ color: chartColors.tooltipText }}
+                    itemStyle={{ color: chartColors.tooltipText }}
                   />
                   <Line
                     type="monotone"
                     dataKey="payment"
-                    stroke="#2563eb"
+                    stroke={chartColors.nominalLine}
                     strokeWidth={2}
                     name="명목 상환액"
                     dot={false}
@@ -128,7 +146,7 @@ const LoanView = () => {
                   <Line
                     type="monotone"
                     dataKey="realPayment"
-                    stroke="#f97316"
+                    stroke={chartColors.realLine}
                     strokeWidth={2}
                     name="실질 상환액"
                     dot={false}

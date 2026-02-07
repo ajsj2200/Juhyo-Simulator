@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { SimulatorProvider, useSimulator } from './contexts/SimulatorContext';
 import { AppLayout } from './components/layout';
 import {
@@ -14,6 +15,7 @@ import {
   PresetsView,
   AssetTrackingView,
 } from './components/views';
+import { resolveTheme } from './utils/theme';
 
 const ViewRouter = () => {
   const { activeView } = useSimulator();
@@ -157,7 +159,39 @@ ${marriageInfo}${retirementInfo}${portfolioInfo}${monteCarloInfo}
 };
 
 const MainContent = () => {
+  const { theme } = useSimulator();
   const copyResults = CopyResultsButton();
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined;
+    const root = document.documentElement;
+    const matchMedia = typeof window === 'undefined' ? null : window.matchMedia;
+
+    const applyTheme = () => {
+      const resolvedTheme = resolveTheme(theme, matchMedia);
+      root.classList.toggle('dark', resolvedTheme === 'dark');
+    };
+
+    applyTheme();
+
+    if (theme !== 'system' || !matchMedia) return undefined;
+    const mediaQuery = matchMedia('(prefers-color-scheme: dark)');
+    if (!mediaQuery) return undefined;
+
+    const handleChange = () => applyTheme();
+
+    if (mediaQuery.addEventListener) {
+      mediaQuery.addEventListener('change', handleChange);
+      return () => mediaQuery.removeEventListener('change', handleChange);
+    }
+
+    if (mediaQuery.addListener) {
+      mediaQuery.addListener(handleChange);
+      return () => mediaQuery.removeListener(handleChange);
+    }
+
+    return undefined;
+  }, [theme]);
 
   return (
     <AppLayout onCopyResults={copyResults}>

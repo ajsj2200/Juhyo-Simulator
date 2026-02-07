@@ -31,9 +31,9 @@ const RetirementPlanSection = ({
     : personYear;
 
   return (
-    <div className="bg-gradient-to-r from-green-50 to-teal-50 p-6 rounded-lg shadow mb-8 border-2 border-green-200">
+    <div className="bg-gradient-to-r from-green-50 to-teal-50 p-6 rounded-lg shadow mb-8 border-2 border-green-200 dark:from-slate-900/70 dark:to-slate-800/60 dark:border-slate-700">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-bold text-gray-800">🏖️ 은퇴 계획</h2>
+        <h2 className="text-xl font-bold text-gray-800 dark:text-slate-100">🏖️ 은퇴 계획</h2>
         <label className="flex items-center cursor-pointer">
           <input
             type="checkbox"
@@ -41,39 +41,39 @@ const RetirementPlanSection = ({
             onChange={(e) =>
               setRetirementPlan({ ...retirementPlan, enabled: e.target.checked })
             }
-            className="w-5 h-5 text-green-600 rounded focus:ring-green-500"
+            className="w-5 h-5 text-green-600 rounded focus:ring-green-500 dark:bg-slate-900 dark:border-slate-600 dark:focus:ring-green-400"
           />
-          <span className="ml-2 text-sm font-medium text-gray-700">활성화</span>
+          <span className="ml-2 text-sm font-medium text-gray-700 dark:text-slate-300">활성화</span>
         </label>
       </div>
 
       {retirementPlan.enabled && (
         <>
           {/* 은퇴 시점 안내 */}
-          <div className="mb-6 p-4 bg-white rounded-lg border border-green-200">
-            <h3 className="font-semibold text-gray-700 mb-3">⏰ 은퇴 시점</h3>
+          <div className="mb-6 p-4 bg-white rounded-lg border border-green-200 dark:bg-slate-900/60 dark:border-slate-700">
+            <h3 className="font-semibold text-gray-700 mb-3 dark:text-slate-200">⏰ 은퇴 시점</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-              <div className="p-3 bg-blue-50 rounded">
-                <div className="text-gray-600">본인 은퇴</div>
-                <div className="text-xl font-bold text-blue-600">{personYear}년 후</div>
-                <div className="text-xs text-gray-500">
+              <div className="p-3 bg-blue-50 rounded dark:bg-slate-800/70">
+                <div className="text-gray-600 dark:text-slate-300">본인 은퇴</div>
+                <div className="text-xl font-bold text-blue-600 dark:text-blue-300">{personYear}년 후</div>
+                <div className="text-xs text-gray-500 dark:text-slate-400">
                   (PersonCard에서 설정)
                 </div>
               </div>
               {isMarriageEnabled && (
-                <div className="p-3 bg-purple-50 rounded">
-                  <div className="text-gray-600">배우자 은퇴</div>
-                  <div className="text-xl font-bold text-purple-600">{spouseYear}년 후</div>
-                  <div className="text-xs text-gray-500">
+                <div className="p-3 bg-purple-50 rounded dark:bg-slate-800/70">
+                  <div className="text-gray-600 dark:text-slate-300">배우자 은퇴</div>
+                  <div className="text-xl font-bold text-purple-600 dark:text-purple-300">{spouseYear}년 후</div>
+                  <div className="text-xs text-gray-500 dark:text-slate-400">
                     (결혼 계획에서 설정)
                   </div>
                 </div>
               )}
             </div>
-            <div className="mt-3 p-2 bg-yellow-50 rounded text-sm">
-              <span className="font-semibold text-gray-700">실제 인출 시작: </span>
-              <span className="text-orange-600 font-bold">{effectiveRetireYear}년 후</span>
-              <span className="text-gray-500 text-xs ml-2">
+            <div className="mt-3 p-2 bg-yellow-50 rounded text-sm dark:bg-slate-800/60">
+              <span className="font-semibold text-gray-700 dark:text-slate-200">실제 인출 시작: </span>
+              <span className="text-orange-600 font-bold dark:text-orange-300">{effectiveRetireYear}년 후</span>
+              <span className="text-gray-500 text-xs ml-2 dark:text-slate-400">
                 (둘 다 은퇴한 시점부터)
               </span>
             </div>
@@ -82,10 +82,12 @@ const RetirementPlanSection = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* 인출 전략 */}
             <div className="space-y-4">
-              <h3 className="font-semibold text-gray-700 border-b pb-2">인출 전략</h3>
+              <h3 className="font-semibold text-gray-700 border-b pb-2 dark:text-slate-200 dark:border-slate-700">
+                인출 전략
+              </h3>
 
-              <div className="flex items-center justify-between border-b pb-2">
-                <h3 className="font-semibold text-gray-700 text-sm">전략 선택</h3>
+              <div className="flex items-center justify-between border-b pb-2 dark:border-slate-700">
+                <h3 className="font-semibold text-gray-700 text-sm dark:text-slate-200">전략 선택</h3>
                 <label className="flex items-center cursor-pointer">
                   <input
                     type="checkbox"
@@ -93,16 +95,16 @@ const RetirementPlanSection = ({
                     onChange={(e) =>
                       setRetirementPlan({ ...retirementPlan, useJEPQ: e.target.checked })
                     }
-                    className="w-4 h-4 text-purple-600 rounded focus:ring-purple-500"
+                    className="w-4 h-4 text-purple-600 rounded focus:ring-purple-500 dark:bg-slate-900 dark:border-slate-600 dark:focus:ring-purple-400"
                   />
-                  <span className="ml-2 text-sm">JEPQ 혼합</span>
+                  <span className="ml-2 text-sm text-gray-700 dark:text-slate-300">JEPQ 혼합</span>
                 </label>
               </div>
 
               {!retirementPlan.useJEPQ ? (
-                <div className="p-3 bg-blue-50 rounded text-sm">
-                  <p className="font-semibold text-gray-700">4% 룰 (VOO 100%)</p>
-                  <p className="text-gray-600 text-xs mt-1">
+                <div className="p-3 bg-blue-50 rounded text-sm dark:bg-slate-800/70">
+                  <p className="font-semibold text-gray-700 dark:text-slate-200">4% 룰 (VOO 100%)</p>
+                  <p className="text-gray-600 text-xs mt-1 dark:text-slate-300">
                     자산의 4%를 매년 인출
                     <br />
                     30년 이상 유지 가능
@@ -120,11 +122,13 @@ const RetirementPlanSection = ({
                     unit="%"
                   />
 
-                  <div className="p-3 bg-purple-50 rounded text-sm">
-                    <p className="text-gray-600">
+                  <div className="p-3 bg-purple-50 rounded text-sm dark:bg-slate-800/70">
+                    <p className="text-gray-600 dark:text-slate-300">
                       JEPQ {retirementPlan.jepqRatio}% / VOO {100 - retirementPlan.jepqRatio}%
                     </p>
-                    <p className="text-xs text-gray-500 mt-1">JEPQ: 배당 수입 | VOO: 자산 성장</p>
+                    <p className="text-xs text-gray-500 mt-1 dark:text-slate-400">
+                      JEPQ: 배당 수입 | VOO: 자산 성장
+                    </p>
                   </div>
                 </>
               )}
@@ -132,7 +136,9 @@ const RetirementPlanSection = ({
 
             {/* 생활비 & 수익률 */}
             <div className="space-y-4">
-              <h3 className="font-semibold text-gray-700 border-b pb-2">생활비 & 수익률</h3>
+              <h3 className="font-semibold text-gray-700 border-b pb-2 dark:text-slate-200 dark:border-slate-700">
+                생활비 & 수익률
+              </h3>
 
               <InputGroup
                 label="월 생활비"
@@ -187,26 +193,28 @@ const RetirementPlanSection = ({
       )}
 
           {retirementPlan.enabled && (
-            <div className="mt-4 p-4 bg-white rounded-lg">
-              <h4 className="font-semibold text-gray-700 mb-2">📊 은퇴 계획 요약</h4>
+            <div className="mt-4 p-4 bg-white rounded-lg dark:bg-slate-900/60">
+              <h4 className="font-semibold text-gray-700 mb-2 dark:text-slate-200">📊 은퇴 계획 요약</h4>
 
           {effectiveRetireYear > years ? (
-            <div className="text-sm text-orange-600 p-3 bg-orange-50 rounded">
+            <div className="text-sm text-orange-600 p-3 bg-orange-50 rounded dark:bg-slate-800/60 dark:text-orange-300">
               ⚠️ 은퇴 시점({effectiveRetireYear}년)이 투자 기간({years}년)보다 깁니다.
               <br />
               투자 기간을 {effectiveRetireYear}년 이상으로 설정해주세요.
             </div>
           ) : (
-            <div className="text-sm text-gray-600 space-y-2">
+            <div className="text-sm text-gray-600 space-y-2 dark:text-slate-300">
               <p>
                 • {effectiveRetireYear}년 후 은퇴 시 자산:
-                <strong className="text-green-600 ml-2">{retireAssetSafe.toFixed(2)}억원</strong>
+                <strong className="text-green-600 ml-2 dark:text-green-300">
+                  {retireAssetSafe.toFixed(2)}억원
+                </strong>
               </p>
 
               {retirementPlan.useJEPQ ? (
                 <>
-                  <div className="pt-2 border-t">
-                    <p className="font-semibold text-purple-600">
+                  <div className="pt-2 border-t dark:border-slate-700">
+                    <p className="font-semibold text-purple-600 dark:text-purple-300">
                       JEPQ {retirementPlan.jepqRatio}% + VOO {100 - retirementPlan.jepqRatio}% 전략
                     </p>
                   </div>
@@ -238,17 +246,19 @@ const RetirementPlanSection = ({
                       {((retireAssetSafe * (100 - retirementPlan.jepqRatio)) / 100).toFixed(2)}억원
                     </strong>
                   </p>
-                  <p className="ml-4 text-xs text-gray-500">
+                  <p className="ml-4 text-xs text-gray-500 dark:text-slate-400">
                     → 연 {retirementPlan.vooGrowthRate}% 성장 예상
                   </p>
-                  <div className="pt-2 border-t mt-2">
+                  <div className="pt-2 border-t mt-2 dark:border-slate-700">
                     <p>
                       • 월 생활비 (현재):
-                      <strong className="text-gray-700 ml-2">{retirementPlan.monthlyExpense}만원</strong>
+                      <strong className="text-gray-700 ml-2 dark:text-slate-200">
+                        {retirementPlan.monthlyExpense}만원
+                      </strong>
                     </p>
                     <p>
                       • {effectiveRetireYear}년 후 생활비 (인플레이션):
-                      <strong className="text-orange-600 ml-2">
+                      <strong className="text-orange-600 ml-2 dark:text-orange-300">
                         {(
                           retirementPlan.monthlyExpense *
                           Math.pow(1 + retirementPlan.inflationRate / 100, effectiveRetireYear)
@@ -268,23 +278,25 @@ const RetirementPlanSection = ({
                 <>
                   <p>
                     • 연간 인출 가능액 (4% 룰):
-                    <strong className="text-green-600 ml-2">
+                    <strong className="text-green-600 ml-2 dark:text-green-300">
                       {(retireAssetSafe * 10000 * 0.04).toFixed(0)}만원
                     </strong>
                   </p>
                   <p>
                     • 월 사용 가능액:
-                    <strong className="text-green-600 ml-2">
+                    <strong className="text-green-600 ml-2 dark:text-green-300">
                       {((retireAssetSafe * 10000 * 0.04) / 12).toFixed(0)}만원
                     </strong>
                   </p>
                   <p>
                     • 월 생활비 (현재):
-                    <strong className="text-gray-700 ml-2">{retirementPlan.monthlyExpense}만원</strong>
+                    <strong className="text-gray-700 ml-2 dark:text-slate-200">
+                      {retirementPlan.monthlyExpense}만원
+                    </strong>
                   </p>
                   <p>
                     • {effectiveRetireYear}년 후 생활비 (인플레이션):
-                    <strong className="text-orange-600 ml-2">
+                    <strong className="text-orange-600 ml-2 dark:text-orange-300">
                       {(
                         retirementPlan.monthlyExpense *
                         Math.pow(1 + retirementPlan.inflationRate / 100, effectiveRetireYear)
@@ -292,7 +304,7 @@ const RetirementPlanSection = ({
                       만원
                     </strong>
                   </p>
-                  <div className="pt-2 border-t mt-2">
+                  <div className="pt-2 border-t mt-2 dark:border-slate-700">
                     <p className="font-semibold">
                       {(retireAssetSafe * 10000 * 0.04) / 12 >=
                       retirementPlan.monthlyExpense * Math.pow(1 + retirementPlan.inflationRate / 100, effectiveRetireYear)

@@ -25,9 +25,20 @@ const MonteCarloView = () => {
     setPortfolio,
     useExchangeRate,
     setUseExchangeRate,
+    theme,
   } = useSimulator();
 
   const [exclusiveModalOpen, setExclusiveModalOpen] = useState(false);
+
+  const chartColors = {
+    grid: theme === 'dark' ? '#334155' : '#e5e7eb',
+    axis: theme === 'dark' ? '#475569' : '#e5e7eb',
+    tick: theme === 'dark' ? '#cbd5e1' : '#6b7280',
+    tooltipBg: theme === 'dark' ? 'rgba(15, 23, 42, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+    tooltipBorder: theme === 'dark' ? '#334155' : '#e5e7eb',
+    tooltipText: theme === 'dark' ? '#e2e8f0' : '#374151',
+  };
+  const histogramFill = theme === 'dark' ? '#818cf8' : '#6366f1';
 
   const onClickRun = () => {
     if (useHistoricalReturns) {
@@ -200,16 +211,22 @@ const MonteCarloView = () => {
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={mcChartData} margin={{ top: 10, right: 20, left: 0, bottom: 40 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
+                    <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
                     <XAxis
                       dataKey="label"
                       angle={-45}
                       textAnchor="end"
                       interval={0}
                       height={60}
-                      tick={{ fontSize: 10 }}
+                      tick={{ fontSize: 10, fill: chartColors.tick }}
+                      axisLine={{ stroke: chartColors.axis }}
+                      tickLine={{ stroke: chartColors.axis }}
                     />
-                    <YAxis tick={{ fontSize: 10 }} />
+                    <YAxis
+                      tick={{ fontSize: 10, fill: chartColors.tick }}
+                      axisLine={{ stroke: chartColors.axis }}
+                      tickLine={{ stroke: chartColors.axis }}
+                    />
                     <Tooltip
                       formatter={(v) => {
                         const count = Number(v) || 0;
@@ -217,8 +234,11 @@ const MonteCarloView = () => {
                         return [`${count}회 (${pct.toFixed(2)}%)`, '빈도'];
                       }}
                       labelFormatter={(l) => `구간: ${l}`}
+                      contentStyle={{ backgroundColor: chartColors.tooltipBg, borderColor: chartColors.tooltipBorder }}
+                      labelStyle={{ color: chartColors.tooltipText }}
+                      itemStyle={{ color: chartColors.tooltipText }}
                     />
-                    <Bar dataKey="count" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="count" fill={histogramFill} radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>

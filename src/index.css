@@ -22,6 +22,14 @@
   --color-text-muted: #6b7280;
   --color-border: #e5e7eb;
 
+  /* Theme Surfaces */
+  --bg-primary: #f8fafc;
+  --bg-secondary: #ffffff;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --border-color: #e2e8f0;
+  --card-bg: #ffffff;
+
   /* Shadows */
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
@@ -44,6 +52,15 @@
   /* Sidebar */
   --sidebar-width: 16rem;
   --header-height: 4rem;
+}
+
+.dark {
+  --bg-primary: #0f172a;
+  --bg-secondary: #111827;
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5f5;
+  --border-color: #334155;
+  --card-bg: #1e293b;
 }
 
 /* Base Typography */

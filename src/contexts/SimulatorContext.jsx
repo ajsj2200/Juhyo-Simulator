@@ -180,6 +180,7 @@ export const SimulatorProvider = ({ children }) => {
   const toggleTheme = useCallback(() => {
     setTheme((currentTheme) => {
       const nextTheme = getNextTheme(currentTheme);
+      console.log('Theme toggle:', currentTheme, '→', nextTheme);
       const storage = getBrowserStorage();
       if (storage?.setItem) {
         try {

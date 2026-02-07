@@ -169,6 +169,7 @@ const MainContent = () => {
 
     const applyTheme = () => {
       const resolvedTheme = resolveTheme(theme, matchMedia);
+      console.log('Applying theme:', theme, '→', resolvedTheme);
       root.classList.toggle('dark', resolvedTheme === 'dark');
     };
 

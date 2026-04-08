@@ -1,6 +1,9 @@
 // Stock API Service - Yahoo Finance API를 통한 주식 데이터 조회
 
 const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
+const REQUEST_TIMEOUT_MS = 12000;
+const searchCache = new Map();
+const stockInfoCache = new Map();
 
 // 색상 팔레트 (커스텀 주식용)
 const STOCK_COLORS = [
@@ -18,6 +21,65 @@ const STOCK_COLORS = [
 
 let colorIndex = 0;
 
+const createServiceError = (message, code, cause) => {
+  const error = new Error(message);
+  error.code = code;
+  error.cause = cause;
+  return error;
+};
+
+const withTimeoutSignal = (signal, timeoutMs = REQUEST_TIMEOUT_MS) => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  const abortFromParent = () => controller.abort();
+  if (signal) {
+    if (signal.aborted) {
+      controller.abort();
+    } else {
+      signal.addEventListener('abort', abortFromParent, { once: true });
+    }
+  }
+
+  return {
+    signal: controller.signal,
+    cleanup: () => {
+      clearTimeout(timeoutId);
+      if (signal) {
+        signal.removeEventListener('abort', abortFromParent);
+      }
+    },
+  };
+};
+
+const fetchYahooJson = async (url, { signal, timeoutMs = REQUEST_TIMEOUT_MS } = {}) => {
+  const { signal: requestSignal, cleanup } = withTimeoutSignal(signal, timeoutMs);
+
+  try {
+    const response = await fetch(CORS_PROXY + encodeURIComponent(url), { signal: requestSignal });
+
+    if (!response.ok) {
+      throw createServiceError(`요청 실패 (${response.status})`, 'HTTP_ERROR');
+    }
+
+    return await response.json();
+  } catch (error) {
+    if (requestSignal.aborted) {
+      throw createServiceError('요청이 취소되었거나 시간이 초과되었습니다.', 'ABORTED', error);
+    }
+    throw error;
+  } finally {
+    cleanup();
+  }
+};
+
+const getVolatilityLevel = (annualStdDev) => {
+  if (annualStdDev * 100 < 10) return 'very-low';
+  if (annualStdDev * 100 < 20) return 'low';
+  if (annualStdDev * 100 < 30) return 'medium';
+  return 'high';
+};
+
 const getNextColor = () => {
   const color = STOCK_COLORS[colorIndex % STOCK_COLORS.length];
   colorIndex++;
@@ -25,27 +87,27 @@ const getNextColor = () => {
 };
 
 // 주식 검색 (티커 또는 이름으로)
-export const searchStocks = async (query) => {
-  if (!query || query.trim().length < 1) {
+export const searchStocks = async (query, options = {}) => {
+  const normalizedQuery = query?.trim();
+  if (!normalizedQuery || normalizedQuery.length < 1) {
     return [];
   }
 
-  try {
-    const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=10&newsCount=0&enableFuzzyQuery=false&quotesQueryId=tss_match_phrase_query`;
-    const response = await fetch(CORS_PROXY + encodeURIComponent(url));
-    
-    if (!response.ok) {
-      throw new Error('Search failed');
-    }
+  const cacheKey = normalizedQuery.toUpperCase();
+  if (searchCache.has(cacheKey)) {
+    return searchCache.get(cacheKey);
+  }
 
-    const data = await response.json();
+  try {
+    const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(normalizedQuery)}&quotesCount=10&newsCount=0&enableFuzzyQuery=false&quotesQueryId=tss_match_phrase_query`;
+    const data = await fetchYahooJson(url, options);
     
     if (!data.quotes) {
       return [];
     }
 
     // 주식과 ETF만 필터링
-    return data.quotes
+    const results = data.quotes
       .filter((q) => q.quoteType === 'EQUITY' || q.quoteType === 'ETF')
       .map((q) => ({
         ticker: q.symbol,
@@ -53,77 +115,100 @@ export const searchStocks = async (query) => {
         type: q.quoteType,
         exchange: q.exchange,
       }));
+
+    searchCache.set(cacheKey, results);
+    return results;
   } catch (error) {
+    if (error.code === 'ABORTED') {
+      throw error;
+    }
     console.error('Stock search error:', error);
-    return [];
+    throw createServiceError('주식 검색이 불안정합니다. 잠시 후 다시 시도하거나 티커로 직접 불러와 주세요.', 'SEARCH_FAILED', error);
   }
 };
 
 // 주식 상세 정보 조회
-export const getStockInfo = async (ticker) => {
-  try {
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=1y`;
-    const response = await fetch(CORS_PROXY + encodeURIComponent(url));
-    
-    if (!response.ok) {
-      throw new Error('Failed to fetch stock info');
-    }
+export const getStockInfo = async (ticker, options = {}) => {
+  const normalizedTicker = ticker?.trim().toUpperCase();
+  if (!normalizedTicker) {
+    throw createServiceError('유효한 티커가 필요합니다.', 'INVALID_TICKER');
+  }
 
-    const data = await response.json();
+  if (stockInfoCache.has(normalizedTicker)) {
+    return stockInfoCache.get(normalizedTicker);
+  }
+
+  try {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(normalizedTicker)}?interval=1d&range=1y`;
+    const data = await fetchYahooJson(url, options);
     const result = data.chart?.result?.[0];
     
     if (!result) {
-      throw new Error('No data found');
+      throw createServiceError('해당 종목 데이터를 찾지 못했습니다.', 'NO_DATA');
     }
 
-    const meta = result.meta;
+    const meta = result.meta || {};
     const quotes = result.indicators?.quote?.[0];
     const timestamps = result.timestamp || [];
     const closes = quotes?.close || [];
 
+    const historicalData = timestamps
+      .map((ts, idx) => ({
+        date: new Date(ts * 1000).toISOString().split('T')[0],
+        price: Number(closes[idx]),
+      }))
+      .filter((d) => Number.isFinite(d.price));
+
+    if (historicalData.length === 0) {
+      throw createServiceError('가격 히스토리를 불러오지 못했습니다.', 'NO_PRICE_HISTORY');
+    }
+
     // 변동성 계산 (연간 표준편차)
     const dailyReturns = [];
-    for (let i = 1; i < closes.length; i++) {
-      if (closes[i] && closes[i - 1]) {
-        dailyReturns.push((closes[i] - closes[i - 1]) / closes[i - 1]);
+    for (let i = 1; i < historicalData.length; i++) {
+      const prev = historicalData[i - 1].price;
+      const curr = historicalData[i].price;
+      if (Number.isFinite(prev) && Number.isFinite(curr) && prev > 0) {
+        dailyReturns.push((curr - prev) / prev);
       }
     }
 
-    const avgReturn = dailyReturns.reduce((a, b) => a + b, 0) / dailyReturns.length;
-    const variance = dailyReturns.reduce((sum, r) => sum + Math.pow(r - avgReturn, 2), 0) / dailyReturns.length;
+    const avgReturn = dailyReturns.length > 0
+      ? dailyReturns.reduce((a, b) => a + b, 0) / dailyReturns.length
+      : 0;
+    const variance = dailyReturns.length > 0
+      ? dailyReturns.reduce((sum, r) => sum + Math.pow(r - avgReturn, 2), 0) / dailyReturns.length
+      : 0;
     const dailyStdDev = Math.sqrt(variance);
-    const annualStdDev = dailyStdDev * Math.sqrt(252); // 연간화 (252 거래일)
-    const annualReturn = avgReturn * 252;
+    const annualStdDev = Number.isFinite(dailyStdDev) ? dailyStdDev * Math.sqrt(252) : 0;
+    const annualReturn = Number.isFinite(avgReturn) ? avgReturn * 252 : 0;
 
-    // 변동성 레벨 결정
-    let volatilityLevel;
-    if (annualStdDev * 100 < 10) volatilityLevel = 'very-low';
-    else if (annualStdDev * 100 < 20) volatilityLevel = 'low';
-    else if (annualStdDev * 100 < 30) volatilityLevel = 'medium';
-    else volatilityLevel = 'high';
-
-    // 과거 가격 데이터
-    const historicalData = timestamps.map((ts, idx) => ({
-      date: new Date(ts * 1000).toISOString().split('T')[0],
-      price: closes[idx],
-    })).filter((d) => d.price != null);
-
-    return {
-      ticker: meta.symbol,
-      name: meta.shortName || meta.longName || meta.symbol,
+    const payload = {
+      ticker: meta.symbol || normalizedTicker,
+      name: meta.shortName || meta.longName || normalizedTicker,
       currency: meta.currency,
       exchange: meta.exchangeName,
-      currentPrice: meta.regularMarketPrice,
-      previousClose: meta.chartPreviousClose,
+      currentPrice: Number.isFinite(meta.regularMarketPrice)
+        ? meta.regularMarketPrice
+        : historicalData[historicalData.length - 1]?.price ?? null,
+      previousClose: Number.isFinite(meta.chartPreviousClose)
+        ? meta.chartPreviousClose
+        : historicalData[historicalData.length - 2]?.price ?? null,
       expectedReturn: Math.round(annualReturn * 10000) / 100, // 백분율
       stdDev: Math.round(annualStdDev * 10000) / 100, // 백분율
-      volatilityLevel,
+      volatilityLevel: getVolatilityLevel(annualStdDev),
       historicalData,
       color: getNextColor(),
     };
+
+    stockInfoCache.set(normalizedTicker, payload);
+    return payload;
   } catch (error) {
+    if (error.code === 'ABORTED') {
+      throw error;
+    }
     console.error('Stock info error:', error);
-    throw error;
+    throw createServiceError('종목 정보를 안정적으로 불러오지 못했습니다. 잠시 후 다시 시도하거나 티커로 직접 불러와 주세요.', 'INFO_FAILED', error);
   }
 };
 
@@ -131,13 +216,7 @@ export const getStockInfo = async (ticker) => {
 export const getHistoricalData = async (ticker, range = '1y') => {
   try {
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=${range}`;
-    const response = await fetch(CORS_PROXY + encodeURIComponent(url));
-    
-    if (!response.ok) {
-      throw new Error('Failed to fetch historical data');
-    }
-
-    const data = await response.json();
+    const data = await fetchYahooJson(url);
     const result = data.chart?.result?.[0];
     
     if (!result) {
@@ -162,13 +241,7 @@ export const getHistoricalData = async (ticker, range = '1y') => {
 export const getAnnualReturns = async (ticker, years = 10) => {
   try {
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1mo&range=${years}y`;
-    const response = await fetch(CORS_PROXY + encodeURIComponent(url));
-    
-    if (!response.ok) {
-      throw new Error('Failed to fetch annual returns');
-    }
-
-    const data = await response.json();
+    const data = await fetchYahooJson(url);
     const result = data.chart?.result?.[0];
     
     if (!result) {

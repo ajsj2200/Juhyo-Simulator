@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { searchStocks, getStockInfo } from '../services/stockApiService';
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts';
 import { useSimulator } from '../contexts/SimulatorContext';
@@ -14,6 +14,10 @@ const StockSearchModal = ({ isOpen, onClose, onAddStock }) => {
   const [allocation, setAllocation] = useState(10);
   const [error, setError] = useState(null);
   const [hasSearched, setHasSearched] = useState(false);
+  const searchAbortRef = useRef(null);
+  const infoAbortRef = useRef(null);
+  const latestSearchRequestRef = useRef(0);
+  const latestInfoRequestRef = useRef(0);
 
   const chartColors = {
     axis: theme === 'dark' ? '#475569' : '#e5e7eb',
@@ -25,21 +29,39 @@ const StockSearchModal = ({ isOpen, onClose, onAddStock }) => {
 
   // 검색 실행 함수
   const handleSearch = useCallback(async () => {
-    if (!searchQuery.trim()) {
+    const query = searchQuery.trim();
+    if (!query) {
       setSearchResults([]);
+      setHasSearched(false);
+      setError(null);
       return;
     }
+
+    searchAbortRef.current?.abort();
+    const controller = new AbortController();
+    searchAbortRef.current = controller;
+    const requestId = latestSearchRequestRef.current + 1;
+    latestSearchRequestRef.current = requestId;
 
     setIsSearching(true);
     setError(null);
     setHasSearched(true);
     try {
-      const results = await searchStocks(searchQuery);
+      const results = await searchStocks(query, { signal: controller.signal });
+      if (latestSearchRequestRef.current !== requestId) return;
       setSearchResults(results);
-    } catch {
-      setError('검색 중 오류가 발생했습니다');
+      if (results.length === 0) {
+        setError('검색 결과가 없습니다. 티커로 다시 시도해보세요.');
+      }
+    } catch (err) {
+      if (err?.code === 'ABORTED') return;
+      if (latestSearchRequestRef.current !== requestId) return;
+      setSearchResults([]);
+      setError(err?.message || '검색 중 오류가 발생했습니다');
     } finally {
-      setIsSearching(false);
+      if (latestSearchRequestRef.current === requestId) {
+        setIsSearching(false);
+      }
     }
   }, [searchQuery]);
 
@@ -52,20 +74,45 @@ const StockSearchModal = ({ isOpen, onClose, onAddStock }) => {
 
   // 종목 선택 시 상세 정보 로드
   const handleSelectStock = useCallback(async (stock) => {
+    infoAbortRef.current?.abort();
+    const controller = new AbortController();
+    infoAbortRef.current = controller;
+    const requestId = latestInfoRequestRef.current + 1;
+    latestInfoRequestRef.current = requestId;
+
     setSelectedStock(stock);
     setIsLoadingInfo(true);
     setError(null);
     setStockInfo(null);
 
     try {
-      const info = await getStockInfo(stock.ticker);
+      const info = await getStockInfo(stock.ticker, { signal: controller.signal });
+      if (latestInfoRequestRef.current !== requestId) return;
       setStockInfo(info);
-    } catch {
-      setError('종목 정보를 불러오는 중 오류가 발생했습니다');
+    } catch (err) {
+      if (err?.code === 'ABORTED') return;
+      if (latestInfoRequestRef.current !== requestId) return;
+      setError(err?.message || '종목 정보를 불러오는 중 오류가 발생했습니다');
     } finally {
-      setIsLoadingInfo(false);
+      if (latestInfoRequestRef.current === requestId) {
+        setIsLoadingInfo(false);
+      }
     }
   }, []);
+
+  // 모달 닫기
+  const handleClose = useCallback(() => {
+    searchAbortRef.current?.abort();
+    infoAbortRef.current?.abort();
+    setSearchQuery('');
+    setSearchResults([]);
+    setSelectedStock(null);
+    setStockInfo(null);
+    setAllocation(10);
+    setError(null);
+    setHasSearched(false);
+    onClose();
+  }, [onClose]);
 
   // 포트폴리오에 추가
   const handleAddToPortfolio = useCallback(() => {
@@ -83,19 +130,16 @@ const StockSearchModal = ({ isOpen, onClose, onAddStock }) => {
 
     onAddStock(stockToAdd);
     handleClose();
-  }, [stockInfo, allocation, onAddStock]);
+  }, [stockInfo, allocation, onAddStock, handleClose]);
 
-  // 모달 닫기
-  const handleClose = useCallback(() => {
-    setSearchQuery('');
-    setSearchResults([]);
-    setSelectedStock(null);
-    setStockInfo(null);
-    setAllocation(10);
-    setError(null);
-    setHasSearched(false);
-    onClose();
-  }, [onClose]);
+  useEffect(() => {
+    if (!isOpen) return undefined;
+
+    return () => {
+      searchAbortRef.current?.abort();
+      infoAbortRef.current?.abort();
+    };
+  }, [isOpen]);
 
   // 변동성 레벨 표시
   const volatilityLabels = {
@@ -170,6 +214,12 @@ const StockSearchModal = ({ isOpen, onClose, onAddStock }) => {
             </div>
           )}
 
+          {!selectedStock && hasSearched && !isSearching && searchResults.length > 0 && (
+            <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+              Yahoo Finance 경유 검색은 가끔 불안정할 수 있어요. 안 되면 티커(AAPL, VOO 등)로 다시 검색해보세요.
+            </div>
+          )}
+
           {/* 검색 결과 */}
           {!selectedStock && searchResults.length > 0 && (
             <div className="space-y-2">
@@ -201,8 +251,11 @@ const StockSearchModal = ({ isOpen, onClose, onAddStock }) => {
               {/* 뒤로가기 */}
               <button
                 onClick={() => {
+                  infoAbortRef.current?.abort();
                   setSelectedStock(null);
                   setStockInfo(null);
+                  setIsLoadingInfo(false);
+                  setError(null);
                 }}
                 className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
               >

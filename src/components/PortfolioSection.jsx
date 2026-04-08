@@ -5,6 +5,7 @@ import {
   ASSET_INFO,
   PORTFOLIO_PRESETS,
   getExpectedPortfolioReturn,
+  getExpectedPortfolioDividendYield,
   getPortfolioStdDev,
 } from '../constants/assetData';
 
@@ -17,6 +18,7 @@ const PortfolioSection = ({ portfolio, setPortfolio }) => {
     customStocks = [],
     monthlyAmounts = { voo: 0, schd: 0, bond: 0, cash: 0 },
     useAmountMode = false,
+    reinvestDividends = true,
   } = portfolio;
   const [localAllocations, setLocalAllocations] = useState(allocations);
   const [localMonthlyAmounts, setLocalMonthlyAmounts] = useState(monthlyAmounts);
@@ -168,6 +170,15 @@ const PortfolioSection = ({ portfolio, setPortfolio }) => {
     }, 0);
     return baseContribution + customContribution;
   }, [baseExpectedReturn, baseWeight, customStocks]);
+
+  const totalDividendYield = useMemo(() => {
+    const baseDividendContribution = getExpectedPortfolioDividendYield(normalizedBaseAllocations) * baseWeight;
+    return baseDividendContribution;
+  }, [normalizedBaseAllocations, baseWeight]);
+
+  const displayedExpectedReturn = reinvestDividends
+    ? totalExpectedReturn
+    : totalExpectedReturn - totalDividendYield;
 
   // 커스텀 주식 포함 전체 표준편차 계산 (단순화: 기본자산 블록 vs 커스텀 주식 상관계수 0.5 가정)
   const totalStdDev = useMemo(() => {
@@ -499,22 +510,32 @@ const PortfolioSection = ({ portfolio, setPortfolio }) => {
           )}
 
           {/* 예상 수익률 및 표준편차 */}
-          <div className="grid grid-cols-3 gap-3 mb-4">
-            <div className="p-3 bg-blue-50 rounded-lg dark:bg-slate-800/70">
-              <div className="text-xs text-gray-600 dark:text-slate-300">예상 수익률</div>
-              <div className="text-lg font-bold text-blue-700 dark:text-blue-300">{totalExpectedReturn.toFixed(1)}%</div>
-            </div>
-            <div className="p-3 bg-orange-50 rounded-lg dark:bg-slate-800/70">
-              <div className="text-xs text-gray-600 dark:text-slate-300">표준편차 (σ)</div>
-              <div className="text-lg font-bold text-orange-700 dark:text-orange-300">{totalStdDev.toFixed(1)}%</div>
-            </div>
-            <div className="p-3 bg-green-50 rounded-lg dark:bg-slate-800/70">
-              <div className="text-xs text-gray-600 dark:text-slate-300">주식 비중</div>
-              <div className="text-lg font-bold text-green-700 dark:text-green-300">
-                {localAllocations.voo + localAllocations.schd + customStocksTotal}%
+            <div className="grid grid-cols-3 gap-3 mb-4">
+              <div className="p-3 bg-blue-50 rounded-lg dark:bg-slate-800/70">
+                <div className="text-xs text-gray-600 dark:text-slate-300">
+                  {reinvestDividends ? '예상 수익률' : '예상 성장률'}
+                </div>
+                <div className="text-lg font-bold text-blue-700 dark:text-blue-300">{displayedExpectedReturn.toFixed(1)}%</div>
+              </div>
+              <div className="p-3 bg-orange-50 rounded-lg dark:bg-slate-800/70">
+                <div className="text-xs text-gray-600 dark:text-slate-300">표준편차 (σ)</div>
+                <div className="text-lg font-bold text-orange-700 dark:text-orange-300">{totalStdDev.toFixed(1)}%</div>
+              </div>
+              <div className="p-3 bg-green-50 rounded-lg dark:bg-slate-800/70">
+                <div className="text-xs text-gray-600 dark:text-slate-300">
+                  {reinvestDividends ? '주식 비중' : '예상 배당률'}
+                </div>
+                <div className="text-lg font-bold text-green-700 dark:text-green-300">
+                  {reinvestDividends ? `${localAllocations.voo + localAllocations.schd + customStocksTotal}%` : `${totalDividendYield.toFixed(1)}%`}
+                </div>
               </div>
             </div>
-          </div>
+
+            {!reinvestDividends && (
+              <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+                배당 미재투자 모드에서는 배당수익률을 복리 성장률에서 제외해 계산합니다.
+              </div>
+            )}
 
           {/* 포트폴리오 파이 시각화 */}
           <div className="flex items-center gap-0.5 mb-4">
@@ -722,6 +743,25 @@ const PortfolioSection = ({ portfolio, setPortfolio }) => {
             <div className="flex items-center gap-3">
               <input
                 type="checkbox"
+                id="reinvestDividends"
+                checked={reinvestDividends}
+                onChange={(e) =>
+                  setPortfolio({ ...portfolio, reinvestDividends: e.target.checked })
+                }
+                className="w-4 h-4 text-emerald-600 rounded dark:bg-slate-900 dark:border-slate-600"
+              />
+              <label htmlFor="reinvestDividends" className="text-sm text-gray-700 dark:text-slate-300">
+                배당 재투자
+              </label>
+              <span className="text-xs text-gray-500 dark:text-slate-400">
+                {reinvestDividends ? '(총수익률 기준)' : '(배당 복리 제외)'}
+              </span>
+            </div>
+
+            {/* 몬테카를로 시뮬레이션 옵션 */}
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
                 id="monteCarloEnabled"
                 checked={monteCarloEnabled || false}
                 onChange={(e) =>
@@ -771,6 +811,12 @@ const PortfolioSection = ({ portfolio, setPortfolio }) => {
             alert(`${stock.ticker}는 이미 포트폴리오에 있습니다.`);
             return;
           }
+
+          if (!Number.isFinite(stock.expectedReturn) || !Number.isFinite(stock.stdDev)) {
+            alert(`${stock.ticker} 정보를 안정적으로 불러오지 못했습니다. 다시 시도해주세요.`);
+            return;
+          }
+
           setPortfolio({
             ...portfolio,
             customStocks: [...customStocks, stock],

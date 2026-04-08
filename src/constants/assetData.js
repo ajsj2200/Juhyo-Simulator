@@ -120,6 +120,7 @@ export const ASSET_CORRELATIONS = {
 // 기본 포트폴리오 설정
 export const DEFAULT_PORTFOLIO = {
   enabled: false,
+  reinvestDividends: true,
   allocations: {
     voo: 100,
     schd: 0,
@@ -198,6 +199,16 @@ export const getExpectedPortfolioReturn = (allocations) => {
   );
 };
 
+export const getExpectedPortfolioDividendYield = (allocations) => {
+  const { voo, schd, bond, cash } = allocations;
+  return (
+    (voo / 100) * ASSET_INFO.voo.dividendYield +
+    (schd / 100) * ASSET_INFO.schd.dividendYield +
+    (bond / 100) * ASSET_INFO.bond.dividendYield +
+    (cash / 100) * 0
+  );
+};
+
 // 포트폴리오 변동성 레벨 계산
 export const getPortfolioVolatilityLevel = (allocations) => {
   const stockRatio = (allocations.voo + allocations.schd) / 100;
@@ -234,8 +245,19 @@ const randomNormal = (mean = 0, stdDev = 1) => {
 };
 
 // 단일 시뮬레이션 실행
-const runSingleSimulation = (initial, monthly, allocations, years, monthlyGrowthRate = 0) => {
+const runSingleSimulation = (
+  initial,
+  monthly,
+  allocations,
+  years,
+  monthlyGrowthRate = 0,
+  reinvestDividends = true
+) => {
   const expectedReturn = getExpectedPortfolioReturn(allocations);
+  const dividendYield = getExpectedPortfolioDividendYield(allocations);
+  const effectiveReturn = reinvestDividends
+    ? expectedReturn
+    : expectedReturn - dividendYield;
   const stdDev = getPortfolioStdDev(allocations);
   
   let wealth = initial;
@@ -245,7 +267,7 @@ const runSingleSimulation = (initial, monthly, allocations, years, monthlyGrowth
 
   for (let year = 0; year < years; year++) {
     // 해당 연도의 랜덤 수익률 생성 (정규분포)
-    const yearReturn = randomNormal(expectedReturn, stdDev);
+    const yearReturn = randomNormal(effectiveReturn, stdDev);
     const monthlyRate = yearReturn / 100 / 12;
 
     // 매년 투자금 증가
@@ -270,12 +292,20 @@ export const runMonteCarloSimulation = (
   allocations,
   years,
   monthlyGrowthRate = 0,
-  numSimulations = 500
+  numSimulations = 500,
+  reinvestDividends = true
 ) => {
   const allSimulations = [];
 
   for (let i = 0; i < numSimulations; i++) {
-    const simulation = runSingleSimulation(initial, monthly, allocations, years, monthlyGrowthRate);
+    const simulation = runSingleSimulation(
+      initial,
+      monthly,
+      allocations,
+      years,
+      monthlyGrowthRate,
+      reinvestDividends
+    );
     allSimulations.push(simulation);
   }
 
@@ -304,8 +334,9 @@ export const runMonteCarloSimulation = (
   return {
     percentiles,
     numSimulations,
-    expectedReturn: getExpectedPortfolioReturn(allocations),
+    expectedReturn: reinvestDividends
+      ? getExpectedPortfolioReturn(allocations)
+      : getExpectedPortfolioReturn(allocations) - getExpectedPortfolioDividendYield(allocations),
     stdDev: getPortfolioStdDev(allocations),
   };
 };
-

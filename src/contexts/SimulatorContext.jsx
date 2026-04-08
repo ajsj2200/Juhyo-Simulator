@@ -22,6 +22,7 @@ import {
   DEFAULT_PORTFOLIO,
   ASSET_INFO,
   getExpectedPortfolioReturn,
+  getExpectedPortfolioDividendYield,
   getPortfolioStdDev,
   runMonteCarloSimulation,
 } from '../constants/assetData';
@@ -277,6 +278,7 @@ export const SimulatorProvider = ({ children }) => {
     const customStocks = portfolio.customStocks || [];
     const useAmountMode = portfolio.useAmountMode || false;
     const monthlyAmounts = portfolio.monthlyAmounts || { voo: 0, schd: 0, bond: 0, cash: 0 };
+    const reinvestDividends = portfolio.reinvestDividends ?? true;
     
     if (useAmountMode) {
       // 금액 모드: 각 자산의 금액 비중으로 수익률 계산
@@ -290,7 +292,9 @@ export const SimulatorProvider = ({ children }) => {
       let weightedReturn = 0;
       Object.entries(monthlyAmounts).forEach(([key, amount]) => {
         const assetReturn = ASSET_INFO[key]?.expectedReturn || 0;
-        weightedReturn += assetReturn * (amount / totalAmount);
+        const dividendAdjustment =
+          reinvestDividends || key === 'cash' ? 0 : (ASSET_INFO[key]?.dividendYield || 0);
+        weightedReturn += (assetReturn - dividendAdjustment) * (amount / totalAmount);
       });
       
       // 커스텀 주식 기여분
@@ -302,16 +306,26 @@ export const SimulatorProvider = ({ children }) => {
     } else {
       // 비율 모드
       const baseReturn = getExpectedPortfolioReturn(portfolio.allocations);
+      const baseDividendYield = getExpectedPortfolioDividendYield(portfolio.allocations);
       const baseTotal = Object.values(portfolio.allocations).reduce((a, b) => a + b, 0);
       
-      const baseContribution = baseReturn * (baseTotal / 100);
+      const baseContribution =
+        (baseReturn - (reinvestDividends ? 0 : baseDividendYield)) * (baseTotal / 100);
       const customContribution = customStocks.reduce((sum, stock) => {
         return sum + (stock.expectedReturn || 0) * (stock.allocation / 100);
       }, 0);
       
       return baseContribution + customContribution;
     }
-  }, [portfolio.enabled, portfolio.allocations, portfolio.customStocks, portfolio.useAmountMode, portfolio.monthlyAmounts, you.rate]);
+  }, [
+    portfolio.enabled,
+    portfolio.allocations,
+    portfolio.customStocks,
+    portfolio.useAmountMode,
+    portfolio.monthlyAmounts,
+    portfolio.reinvestDividends,
+    you.rate,
+  ]);
 
   // Portfolio standard deviation (including custom stocks)
   const portfolioStdDev = useMemo(() => {
@@ -351,13 +365,15 @@ export const SimulatorProvider = ({ children }) => {
       portfolio.allocations,
       years,
       you.monthlyGrowthRate,
-      simulations
+      simulations,
+      portfolio.reinvestDividends ?? true
     );
   }, [
     portfolio.enabled,
     portfolio.monteCarloEnabled,
     portfolio.monteCarloSimulations,
     portfolio.allocations,
+    portfolio.reinvestDividends,
     you.initial,
     you.monthly,
     you.monthlyGrowthRate,
@@ -419,14 +435,17 @@ export const SimulatorProvider = ({ children }) => {
       const schdReturn = assetReturnsForPortfolio.schd[idx % assetReturnsForPortfolio.schd.length] ?? 8;
       const bondReturn = assetReturnsForPortfolio.bond[idx % assetReturnsForPortfolio.bond.length] ?? 4;
       const cashReturn = assetReturnsForPortfolio.cash ?? 3;
+      const dividendAdjustment = portfolio.reinvestDividends
+        ? 0
+        : getExpectedPortfolioDividendYield(portfolio.allocations);
       return (
         (portfolio.allocations.voo / 100) * vooReturn +
         (portfolio.allocations.schd / 100) * schdReturn +
         (portfolio.allocations.bond / 100) * bondReturn +
         (portfolio.allocations.cash / 100) * cashReturn
-      );
+      ) - dividendAdjustment;
     });
-  }, [historicalReturns, portfolio.allocations]);
+  }, [historicalReturns, portfolio.allocations, portfolio.reinvestDividends]);
 
   // Chart data calculation
   const chartData = useMemo(() => {
@@ -948,7 +967,10 @@ export const SimulatorProvider = ({ children }) => {
 • 월 투자액: ${(marriagePlan.spouse?.monthly || 0).toLocaleString()}만원 (저축률 ${((marriagePlan.spouse?.salary > 0 ? (marriagePlan.spouse.monthly / marriagePlan.spouse.salary) : 0) * 100).toFixed(1)}%)
 • 투자액 증가율: ${marriagePlan.spouse?.monthlyGrowthRate || 0}%/년
 • 연 수익률: ${marriagePlan.spouse?.rate || 0}%
+• 배당 재투자: ${marriagePlan.spouse?.reinvestDividends === false ? `아니오 (배당수익률 ${marriagePlan.spouse?.dividendYield || 0}% 제외)` : '예'}
 • 은퇴 시점: ${marriagePlan.spouse?.retireYear || 0}년 후
+${(marriagePlan.spouse?.adjustments?.length > 0) ? `• 저축 변경 스케줄: ${marriagePlan.spouse.adjustments.map(a => `${a.year}년 후 → ${a.monthly}만원/월`).join(', ')}` : ''}
+${(marriagePlan.spouse?.lumpSums?.length > 0) ? `• 일시 투자 (상여금): ${marriagePlan.spouse.lumpSums.map(l => `${l.year}년 후 ${Number(l.amount).toLocaleString()}만원`).join(', ')}` : ''}
 
 ${
   marriagePlan.buyHouse
@@ -1023,6 +1045,7 @@ ${
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 • 배분 비율: VOO ${portfolio.allocations?.voo || 0}% | SCHD ${portfolio.allocations?.schd || 0}% | BND ${portfolio.allocations?.bond || 0}% | CASH ${portfolio.allocations?.cash || 0}%
 • 가중 평균 기대수익률: ${portfolioRate.toFixed(1)}%
+• 배당 재투자: ${portfolio.reinvestDividends === false ? '아니오 (배당 복리 제외)' : '예'}
 ${portfolio.rebalanceEnabled ? `• 리밸런싱: 매 ${portfolio.rebalanceFrequency}개월 마다` : '• 리밸런싱: 없음 (Buy & Hold)'}
 ${portfolio.monteCarloEnabled ? '• 몬테카를로 적용: 예 (포트폴리오 변동성 반영)' : '• 몬테카를로 적용: 아니오'}
 `
@@ -1139,7 +1162,10 @@ ${useExchangeRate ? '  → IMF(1997)나 금융위기(2008) 등 환율 급등 시
 • 초기 자산: ${you.initial.toLocaleString()}만원
 • 투자액 증가율: ${you.monthlyGrowthRate}%/년
 • 연평균 수익률 가정: ${useHistoricalReturns ? `S&P 500 역사적 수익률 (${historicalStartYear}년~)` : `${you.rate}%`}
+• 배당 재투자: ${you.reinvestDividends === false ? `아니오 (배당수익률 ${you.dividendYield || 0}% 제외)` : '예'}
 • 은퇴 목표: ${you.retireYear}년 후
+${(you.adjustments?.length > 0) ? `• 저축 변경 스케줄: ${you.adjustments.map(a => `${a.year}년 후 → ${a.monthly}만원/월`).join(', ')}` : ''}
+${(you.lumpSums?.length > 0) ? `• 일시 투자 (상여금): ${you.lumpSums.map(l => `${l.year}년 후 ${Number(l.amount).toLocaleString()}만원`).join(', ')}` : ''}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 👤 비교 대상(${other.name}) 설정
@@ -1148,6 +1174,7 @@ ${useExchangeRate ? '  → IMF(1997)나 금융위기(2008) 등 환율 급등 시
 • 투자 방식: ${otherUseCompound ? '복리 투자' : '단리 저축'}
 • 월 투자액: ${other.monthly.toLocaleString()}만원 (저축률 ${otherSavingsRate}%)
 • 연 수익률: ${other.rate}%
+• 배당 재투자: ${other.reinvestDividends === false ? `아니오 (배당수익률 ${other.dividendYield || 0}% 제외)` : '예'}
 
 ${marriageInfo}${retirementInfo}${crisisInfo}${portfolioInfo}${monteCarloInfo}${historicalInfo}
 
@@ -1174,7 +1201,11 @@ ${marriageInfo}${retirementInfo}${crisisInfo}${portfolioInfo}${monteCarloInfo}${
 ------------------------------------------------------------
 ${chartDataWithMonteCarlo.map((data, idx) => {
   const eventLabels = [];
-  if (marriagePlan.enabled && idx === marriagePlan.yearOfMarriage) eventLabels.push('결혼/집');
+  if (marriagePlan.enabled && idx === marriagePlan.yearOfMarriage) eventLabels.push('결혼');
+  if (marriagePlan.enabled && marriagePlan.buyHouse) {
+    const housePurchaseYear = marriagePlan.yearOfHousePurchase ?? marriagePlan.yearOfMarriage;
+    if (idx === housePurchaseYear) eventLabels.push('집 구매');
+  }
   if (marriagePlan.enabled && marriagePlan.buyHouse && idx === loanCompletionYear) eventLabels.push('대출완료');
   if (retirementPlan.enabled && idx === you.retireYear) eventLabels.push('은퇴');
   if (crossoverYear === idx) eventLabels.push('역전');
@@ -1315,18 +1346,43 @@ ${chartDataWithMonteCarlo.map((data, idx) => {
   const handleConfirmLoadPreset = useCallback((preset) => {
     if (!preset?.data) return;
     const cloned = JSON.parse(JSON.stringify(preset.data));
+
+    const normalizePerson = (value, fallback) => ({
+      ...fallback,
+      ...value,
+      adjustments: value?.adjustments || fallback.adjustments || [],
+      lumpSums: value?.lumpSums || fallback.lumpSums || [],
+    });
+
+    const normalizeMarriagePlan = (value) => ({
+      ...DEFAULT_MARRIAGE_PLAN,
+      ...value,
+      spouse: normalizePerson(value?.spouse, DEFAULT_MARRIAGE_PLAN.spouse),
+    });
     
     // 개별 상태 로드 (오래된 데이터 대응을 위해 기존 값 or 기본값 fallback)
-    if (cloned.you) setYou(cloned.you);
-    if (cloned.other) setOther(cloned.other);
+    if (cloned.you) setYou(normalizePerson(cloned.you, DEFAULT_PERSON.you));
+    if (cloned.other) setOther(normalizePerson(cloned.other, DEFAULT_PERSON.other));
     if (cloned.years !== undefined) setYears(cloned.years);
-    if (cloned.marriagePlan) setMarriagePlan(cloned.marriagePlan);
+    if (cloned.marriagePlan) setMarriagePlan(normalizeMarriagePlan(cloned.marriagePlan));
     if (cloned.retirementPlan) setRetirementPlan(cloned.retirementPlan);
     if (cloned.crisis) setCrisis(cloned.crisis);
     
     // 포트폴리오 로드 (기존 프리셋 호환성 유지)
     if (cloned.portfolio) {
-      setPortfolio(cloned.portfolio);
+      setPortfolio({
+        ...DEFAULT_PORTFOLIO,
+        ...cloned.portfolio,
+        allocations: {
+          ...DEFAULT_PORTFOLIO.allocations,
+          ...(cloned.portfolio.allocations || {}),
+        },
+        monthlyAmounts: {
+          ...DEFAULT_PORTFOLIO.monthlyAmounts,
+          ...(cloned.portfolio.monthlyAmounts || {}),
+        },
+        customStocks: cloned.portfolio.customStocks || [],
+      });
     }
     // 대출 계산기 로드
     if (cloned.loanCalc) {

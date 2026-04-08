@@ -56,6 +56,19 @@ const annualPctToMonthlyRate = (annualPct) => {
   return Math.pow(base, 1 / 12) - 1;
 };
 
+const getEffectiveAnnualRate = (subject) => {
+  if (!subject) return 0;
+  const rate = Number(subject.rate) || 0;
+  const dividendYield = Number(subject.dividendYield) || 0;
+  return subject.reinvestDividends === false ? rate - dividendYield : rate;
+};
+
+const getEffectiveHistoricalAnnualReturn = (annualReturn, subject) => {
+  const baseReturn = Number(annualReturn) || 0;
+  const dividendYield = Number(subject?.dividendYield) || 0;
+  return subject?.reinvestDividends === false ? baseReturn - dividendYield : baseReturn;
+};
+
 // 몬테카를로: 연 수익률을 부트스트랩/셔플해 누적 자산 분포 계산 (인출·결혼·대출 미포함, 적립 구간만)
 export const runMonteCarloAccumulation = (person, years, options = {}) => {
   const {
@@ -82,6 +95,7 @@ export const runMonteCarloAccumulation = (person, years, options = {}) => {
         monthly = monthly * (1 + (person.monthlyGrowthRate || 0) / 100);
       }
       monthly = applyContributionAdjustment(y, monthly, person.adjustments);
+      wealth += applyLumpSum(y, person.lumpSums);
       const monthlyRate = Math.pow(1 + seq[y], 1 / 12) - 1;
       for (let m = 0; m < 12; m++) {
         wealth = wealth * (1 + monthlyRate) + monthly;
@@ -419,8 +433,14 @@ export const calculateWealthWithMarriage = (
   let spouseWealth = 0;
   let principalYou = youWealth;
   let principalSpouse = 0;
-  const youRateMonthly = person.rate / 100 / 12;
-  const spouseRateMonthly = (marriage.spouse.rate ?? person.rate) / 100 / 12;
+  const youRateMonthly = getEffectiveAnnualRate(person) / 100 / 12;
+  const spouseAnnualRate =
+    marriage.spouse.rate ?? (Number(person.rate) || 0);
+  const spouseRateMonthly = (
+    marriage.spouse.reinvestDividends === false
+      ? spouseAnnualRate - (Number(marriage.spouse.dividendYield) || 0)
+      : spouseAnnualRate
+  ) / 100 / 12;
   const crisisActive = (currentYear) =>
     crisis?.enabled &&
     currentYear >= crisis.startYear &&
@@ -451,6 +471,8 @@ export const calculateWealthWithMarriage = (
     }
     personMonthly = applyContributionAdjustment(year, personMonthly, person.adjustments);
     spouseMonthly = applyContributionAdjustment(year, spouseMonthly, marriage.spouse.adjustments);
+    youWealth += applyLumpSum(year, person.lumpSums);
+    spouseWealth += applyLumpSum(year, marriage.spouse?.lumpSums);
 
     for (let month = 0; month < 12; month++) {
       const currentYear = year + month / 12;
@@ -674,7 +696,8 @@ export const calculateWealthWithMarriage = (
 export const calculateWealth = (initial, monthly, annualRate, years, monthlyGrowthRate = 0, person = null, retirement = null, crisis = null, useCompound = true) => {
   let wealth = initial;
   let principalBase = wealth; // 단리 시 이자 계산용 원금 누적
-  const monthlyRate = annualRate / 100 / 12;
+  const effectiveAnnualRate = person ? getEffectiveAnnualRate({ ...person, rate: annualRate }) : annualRate;
+  const monthlyRate = effectiveAnnualRate / 100 / 12;
   let currentMonthly = monthly;
   const growthRate = monthlyGrowthRate / 100;
   const crisisActive = (currentYear) =>
@@ -688,6 +711,7 @@ export const calculateWealth = (initial, monthly, annualRate, years, monthlyGrow
       currentMonthly = currentMonthly * (1 + growthRate);
     }
     currentMonthly = applyContributionAdjustment(year, currentMonthly, person?.adjustments);
+    wealth += applyLumpSum(year, person?.lumpSums);
 
     for (let month = 0; month < 12; month++) {
       const currentYear = year + month / 12;
@@ -776,6 +800,13 @@ const applyContributionAdjustment = (currentYear, currentMonthly, adjustments = 
   return next;
 };
 
+const applyLumpSum = (currentYear, lumpSums = []) => {
+  if (!lumpSums || lumpSums.length === 0) return 0;
+  return lumpSums
+    .filter((l) => Number(l.year) === currentYear)
+    .reduce((sum, l) => sum + (Number(l.amount) || 0), 0);
+};
+
 /**
  * 특정 시점의 주택 가치 계산 (집 구매 이후, 월 복리 상승)
  */
@@ -824,7 +855,10 @@ export const calculateWealthWithHistoricalReturns = (
 
   for (let year = 0; year < years; year++) {
     // 해당 연도의 수익률 (배열 순환)
-    const yearReturn = annualReturns[year % annualReturns.length] || 0;
+    const yearReturn = getEffectiveHistoricalAnnualReturn(
+      annualReturns[year % annualReturns.length] || 0,
+      person
+    );
     const monthlyRate = annualPctToMonthlyRate(yearReturn);
 
     // 매년 1월(첫 달)에 투자금 증가
@@ -832,6 +866,7 @@ export const calculateWealthWithHistoricalReturns = (
       currentMonthly = currentMonthly * (1 + growthRate);
     }
     currentMonthly = applyContributionAdjustment(year, currentMonthly, person?.adjustments);
+    wealth += applyLumpSum(year, person?.lumpSums);
 
     for (let month = 0; month < 12; month++) {
       const currentYear = year + month / 12;
@@ -937,15 +972,24 @@ export const calculateWealthWithMarriageHistorical = (
       year,
       wealth: youWealth + spouseWealth,  // 금융자산만 (집 제외)
       wealthWithHouse,  // 집값 포함 순자산 (집 포함)
-      returnRate: year > 0 ? (annualReturns[(year - 1) % annualReturns.length] || 0) : null,
+      returnRate: year > 0
+        ? getEffectiveHistoricalAnnualReturn(
+            annualReturns[(year - 1) % annualReturns.length] || 0,
+            person
+          )
+        : null,
     });
 
     // targetYear까지 도달했으면 더 이상 시뮬 안함
     if (year >= targetYear) break;
 
-    const yearReturn = annualReturns[year % annualReturns.length] || 0;
-    const youRateMonthly = annualPctToMonthlyRate(yearReturn);
-    const spouseRateMonthly = annualPctToMonthlyRate(yearReturn);
+    const rawYearReturn = annualReturns[year % annualReturns.length] || 0;
+    const youRateMonthly = annualPctToMonthlyRate(
+      getEffectiveHistoricalAnnualReturn(rawYearReturn, person)
+    );
+    const spouseRateMonthly = annualPctToMonthlyRate(
+      getEffectiveHistoricalAnnualReturn(rawYearReturn, marriage.spouse)
+    );
 
     if (year > 0) {
       personMonthly = personMonthly * (1 + personGrowthRate);
@@ -953,6 +997,8 @@ export const calculateWealthWithMarriageHistorical = (
     }
     personMonthly = applyContributionAdjustment(year, personMonthly, person.adjustments);
     spouseMonthly = applyContributionAdjustment(year, spouseMonthly, marriage.spouse.adjustments);
+    youWealth += applyLumpSum(year, person.lumpSums);
+    spouseWealth += applyLumpSum(year, marriage.spouse?.lumpSums);
 
     for (let month = 0; month < 12; month++) {
       const currentYear = year + month / 12;
@@ -1166,6 +1212,13 @@ export const calculateWealthWithPortfolio = (
       currentMonthly = currentMonthly * (1 + growthRate);
     }
     currentMonthly = applyContributionAdjustment(year, currentMonthly, person?.adjustments);
+    const lumpSum = applyLumpSum(year, person?.lumpSums);
+    if (lumpSum !== 0) {
+      holdings.voo += lumpSum * (allocations.voo / 100);
+      holdings.schd += lumpSum * (allocations.schd / 100);
+      holdings.bond += lumpSum * (allocations.bond / 100);
+      holdings.cash += lumpSum * (allocations.cash / 100);
+    }
 
     for (let month = 0; month < 12; month++) {
       const currentYear = year + month / 12;

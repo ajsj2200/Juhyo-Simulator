@@ -14,6 +14,7 @@ import {
   LoanView,
   PresetsView,
   AssetTrackingView,
+  AssetSalaryView,
 } from './components/views';
 import { resolveTheme } from './utils/theme';
 
@@ -33,6 +34,7 @@ const ViewRouter = () => {
     loan: LoanView,
     presets: PresetsView,
     assetTracking: AssetTrackingView,
+    assetSalary: AssetSalaryView,
   };
 
   const ViewComponent = views[activeView] || DashboardView;

@@ -10,3 +10,4 @@ export { default as CrisisView } from './CrisisView';
 export { default as LoanView } from './LoanView';
 export { default as PresetsView } from './PresetsView';
 export { default as AssetTrackingView } from './AssetTrackingView';
+export { default as AssetSalaryView } from './AssetSalaryView';

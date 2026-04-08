@@ -6,6 +6,7 @@ const mobileNavItems = [
   { id: 'profile', icon: '👤', label: '내정보' },
   { id: 'marriage', icon: '💒', label: '계획' },
   { id: 'loan', icon: '🧮', label: '도구' },
+  { id: 'assetSalary', icon: '💸', label: '월급' },
 ];
 
 const MobileNav = ({ className = '' }) => {

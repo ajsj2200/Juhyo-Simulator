@@ -31,6 +31,7 @@ const navItems = [
     children: [
       { id: 'loan', icon: '🏦', label: '대출 계산기' },
       { id: 'assetTracking', icon: '📈', label: '자산 추적' },
+      { id: 'assetSalary', icon: '💸', label: '자산 월급' },
       { id: 'presets', icon: '💾', label: '프리셋 관리' },
     ],
   },

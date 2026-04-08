@@ -187,6 +187,37 @@ const MarriagePlanSection = ({ marriagePlan, setMarriagePlan, personMonthly }) =
                 unit="%"
               />
 
+              <div className="mb-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-900/50 dark:bg-emerald-950/20">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={marriagePlan.spouse.reinvestDividends !== false}
+                    onChange={(e) => updateSpouse({ reinvestDividends: e.target.checked })}
+                    className="w-4 h-4 text-emerald-600 rounded dark:bg-slate-900 dark:border-slate-600"
+                  />
+                  <div>
+                    <div className="text-sm font-medium text-gray-800 dark:text-slate-100">배당 재투자</div>
+                    <div className="text-xs text-gray-600 dark:text-slate-300">
+                      {marriagePlan.spouse.reinvestDividends === false ? '배당 복리 제외' : '배당 포함 총수익률 기준'}
+                    </div>
+                  </div>
+                </label>
+
+                {marriagePlan.spouse.reinvestDividends === false && (
+                  <div className="mt-3">
+                    <InputGroup
+                      label="배우자 배당 수익률"
+                      value={marriagePlan.spouse.dividendYield ?? 1.5}
+                      onChange={(v) => updateSpouse({ dividendYield: v })}
+                      min={0}
+                      max={15}
+                      step={0.1}
+                      unit="%"
+                    />
+                  </div>
+                )}
+              </div>
+
               <InputGroup
                 label="배우자 은퇴 시점"
                 value={marriagePlan.spouse.retireYear}

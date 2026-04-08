@@ -77,6 +77,37 @@ const PersonCard = ({ person, setPerson, color, showRetirement = false }) => {
         unit="%"
       />
 
+      <div className="mb-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-900/50 dark:bg-emerald-950/20">
+        <label className="flex items-center gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={person.reinvestDividends !== false}
+            onChange={(e) => setPerson({ ...person, reinvestDividends: e.target.checked })}
+            className="w-4 h-4 text-emerald-600 rounded dark:bg-slate-900 dark:border-slate-600"
+          />
+          <div>
+            <div className="text-sm font-medium text-gray-800 dark:text-slate-100">배당 재투자</div>
+            <div className="text-xs text-gray-600 dark:text-slate-300">
+              {person.reinvestDividends === false ? '배당 복리 제외' : '배당 포함 총수익률 기준'}
+            </div>
+          </div>
+        </label>
+
+        {person.reinvestDividends === false && (
+          <div className="mt-3">
+            <InputGroup
+              label="배당 수익률"
+              value={person.dividendYield ?? 1.5}
+              onChange={(v) => setPerson({ ...person, dividendYield: v })}
+              min={0}
+              max={15}
+              step={0.1}
+              unit="%"
+            />
+          </div>
+        )}
+      </div>
+
       {showRetirement && (
         <InputGroup
           label="은퇴 시점"
@@ -161,6 +192,81 @@ const PersonCard = ({ person, setPerson, color, showRetirement = false }) => {
                   const next = [...person.adjustments];
                   next.splice(idx, 1);
                   setPerson({ ...person, adjustments: next });
+                }}
+              >
+                삭제
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 일시 투자 (상여금 등) */}
+      <div className="mt-4">
+        <div className="flex items-center justify-between mb-2">
+          <h4 className="text-sm font-semibold text-gray-700 dark:text-slate-200">
+            일시 투자 (상여금)
+          </h4>
+          <button
+            type="button"
+            className="text-xs px-2 py-1 rounded bg-orange-50 border border-orange-200 text-orange-700 dark:bg-slate-800/70 dark:border-slate-600 dark:text-orange-300"
+            onClick={() =>
+              setPerson({
+                ...person,
+                lumpSums: [
+                  ...(person.lumpSums || []),
+                  { year: (person.lumpSums?.slice(-1)[0]?.year || 0) + 1, amount: 500 },
+                ],
+              })
+            }
+          >
+            + 추가
+          </button>
+        </div>
+        {(person.lumpSums || []).length === 0 && (
+          <div className="text-xs text-gray-500 bg-gray-50 p-2 rounded dark:text-slate-400 dark:bg-slate-800/60">
+            특정 연도에 상여금·보너스 등을 일시 투자하려면 "+ 추가"를 눌러 입력하세요.
+          </div>
+        )}
+        <div className="space-y-2">
+          {(person.lumpSums || []).map((ls, idx) => (
+            <div
+              key={`ls-${idx}-${ls.year}`}
+              className="grid grid-cols-2 gap-2 items-end bg-orange-50 p-2 rounded dark:bg-slate-800/60"
+            >
+              <InputGroup
+                label="투자 시점(년 후)"
+                value={ls.year}
+                onChange={(v) => {
+                  const next = [...(person.lumpSums || [])];
+                  next[idx] = { ...next[idx], year: v };
+                  setPerson({ ...person, lumpSums: next });
+                }}
+                min={0}
+                max={70}
+                step={1}
+                unit="년"
+              />
+              <InputGroup
+                label="일시 투자액"
+                value={ls.amount}
+                onChange={(v) => {
+                  const next = [...(person.lumpSums || [])];
+                  next[idx] = { ...next[idx], amount: v };
+                  setPerson({ ...person, lumpSums: next });
+                }}
+                min={0}
+                max={100000}
+                step={100}
+                unit="만원"
+              />
+              <button
+                type="button"
+                className="col-span-2 text-xs text-red-600 hover:underline dark:text-red-400"
+                onClick={() => {
+                  const next = [...(person.lumpSums || [])];
+                  next.splice(idx, 1);
+                  setPerson({ ...person, lumpSums: next });
                 }}
               >
                 삭제

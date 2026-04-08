@@ -7,9 +7,12 @@ export const DEFAULT_PERSON = {
     expense: 220, // 월 생활비(만원)
     monthly: 210, // 세후 월급 - 생활비
     rate: 8,
+    reinvestDividends: true,
+    dividendYield: 1.5,
     retireYear: 20, // 개인 은퇴 시점
     monthlyGrowthRate: 3.0, // 월 투자액 연간 증가율 (%)
     adjustments: [], // { year: n, monthly: m }
+    lumpSums: [], // { year: n, amount: a } 일시 투자 (상여금 등)
   },
   other: {
     name: '대기업 직원',
@@ -18,8 +21,11 @@ export const DEFAULT_PERSON = {
     expense: 250, // 월 생활비(만원)
     monthly: 100,
     rate: 3.4,
+    reinvestDividends: true,
+    dividendYield: 1.5,
     monthlyGrowthRate: 3.0, // 월 투자액 연간 증가율 (%)
     adjustments: [],
+    lumpSums: [],
   },
 };
 
@@ -31,8 +37,11 @@ export const PRESETS = {
     expense: 215,
     monthly: 105,
     rate: 3.4,
+    reinvestDividends: true,
+    dividendYield: 1.5,
     monthlyGrowthRate: 3.0,
     adjustments: [],
+    lumpSums: [],
   },
   corporate: {
     name: '대기업 직원',
@@ -41,8 +50,11 @@ export const PRESETS = {
     expense: 250,
     monthly: 100,
     rate: 3.4,
+    reinvestDividends: true,
+    dividendYield: 1.5,
     monthlyGrowthRate: 3.0,
     adjustments: [],
+    lumpSums: [],
   },
   savingsOnly: {
     name: '적금러',
@@ -51,8 +63,11 @@ export const PRESETS = {
     expense: 170,
     monthly: 150,
     rate: 3.5,
+    reinvestDividends: true,
+    dividendYield: 1.5,
     monthlyGrowthRate: 3.0,
     adjustments: [],
+    lumpSums: [],
   },
   indexInvestor: {
     name: 'VOO 투자자',
@@ -61,8 +76,11 @@ export const PRESETS = {
     expense: 180,
     monthly: 200,
     rate: 8.0,
+    reinvestDividends: true,
+    dividendYield: 1.5,
     monthlyGrowthRate: 3.0,
     adjustments: [],
+    lumpSums: [],
   },
 };
 
@@ -76,9 +94,12 @@ export const DEFAULT_MARRIAGE_PLAN = {
     monthly: 150, // 세후 월급 - 생활비
     initial: 0,
     rate: 8.0,
+    reinvestDividends: true,
+    dividendYield: 1.5,
     retireYear: 20, // 배우자 은퇴 시점
     monthlyGrowthRate: 3.0, // 월 투자액 연간 증가율 (%)
     adjustments: [],
+    lumpSums: [],
   },
   buyHouse: true,
   yearOfHousePurchase: 2, // 집 구매 시점 (0 = 시뮬레이션 시작, 결혼과 별개)

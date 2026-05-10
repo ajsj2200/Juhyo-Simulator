@@ -9,13 +9,46 @@ import {
   getPortfolioStdDev,
 } from '../constants/assetData';
 
+const toFiniteNumber = (value, fallback = 0) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+};
+
+const normalizeTicker = (value) => {
+  const ticker = typeof value === 'string' ? value.trim().toUpperCase() : '';
+  return ticker || null;
+};
+
+const normalizeCustomStock = (stock) => {
+  if (!stock || typeof stock !== 'object') return null;
+
+  const ticker = normalizeTicker(stock.ticker);
+  if (!ticker) return null;
+
+  return {
+    ...stock,
+    ticker,
+    name: stock.name || ticker,
+    allocation: Math.max(0, Math.min(100, toFiniteNumber(stock.allocation, 0))),
+    monthlyAmount: Math.max(0, toFiniteNumber(stock.monthlyAmount, 0)),
+    initialAmount: Math.max(0, toFiniteNumber(stock.initialAmount, 0)),
+    expectedReturn: toFiniteNumber(stock.expectedReturn, 0),
+    stdDev: Math.max(0, toFiniteNumber(stock.stdDev, 0)),
+    color: typeof stock.color === 'string' && stock.color.trim() ? stock.color : '#8b5cf6',
+  };
+};
+
+const normalizeCustomStocks = (stocks) => (
+  Array.isArray(stocks) ? stocks.map(normalizeCustomStock).filter(Boolean) : []
+);
+
 const PortfolioSection = ({ portfolio, setPortfolio }) => {
   const { 
     allocations, 
     rebalanceEnabled, 
     rebalanceFrequency, 
     monteCarloEnabled, 
-    customStocks = [],
+    customStocks: rawCustomStocks = [],
     monthlyAmounts = { voo: 0, schd: 0, bond: 0, cash: 0 },
     useAmountMode = false,
     reinvestDividends = true,
@@ -23,6 +56,7 @@ const PortfolioSection = ({ portfolio, setPortfolio }) => {
   const [localAllocations, setLocalAllocations] = useState(allocations);
   const [localMonthlyAmounts, setLocalMonthlyAmounts] = useState(monthlyAmounts);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+  const customStocks = useMemo(() => normalizeCustomStocks(rawCustomStocks), [rawCustomStocks]);
 
   // 커스텀 주식 합계 계산
   const customStocksTotal = customStocks.reduce((sum, s) => sum + s.allocation, 0);
@@ -603,18 +637,21 @@ const PortfolioSection = ({ portfolio, setPortfolio }) => {
                 보유 금액, 수익률, 변동성을 설정하세요.
               </div>
               <div className="space-y-3">
-                {customStocks.map((stock) => (
-                  <div key={stock.ticker} className="p-3 bg-gray-50 rounded-lg dark:bg-slate-800/60">
+                {customStocks.map((stock) => {
+                  const tickerLabel = stock.ticker || '?';
+
+                  return (
+                    <div key={stock.ticker} className="p-3 bg-gray-50 rounded-lg dark:bg-slate-800/60">
                     <div className="flex items-center gap-3 mb-2">
                       <div
                         className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-xs"
                         style={{ backgroundColor: stock.color }}
                       >
-                        {stock.ticker.slice(0, 2)}
+                        {tickerLabel.slice(0, 2)}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="font-semibold text-gray-900 text-sm dark:text-slate-100">
-                          {stock.ticker}
+                          {tickerLabel}
                         </div>
                         <div className="text-xs text-gray-500 truncate dark:text-slate-400">
                           {stock.name}
@@ -703,8 +740,9 @@ const PortfolioSection = ({ portfolio, setPortfolio }) => {
                         <span className="text-xs text-gray-500 dark:text-slate-400">%</span>
                       </div>
                     </div>
-                  </div>
-                ))}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -806,20 +844,26 @@ const PortfolioSection = ({ portfolio, setPortfolio }) => {
         isOpen={isSearchModalOpen}
         onClose={() => setIsSearchModalOpen(false)}
         onAddStock={(stock) => {
-          // 중복 체크
-          if (customStocks.some((s) => s.ticker === stock.ticker)) {
-            alert(`${stock.ticker}는 이미 포트폴리오에 있습니다.`);
+          const normalizedStock = normalizeCustomStock(stock);
+          if (!normalizedStock) {
+            alert('종목 정보를 안정적으로 불러오지 못했습니다. 티커로 다시 검색해주세요.');
             return;
           }
 
-          if (!Number.isFinite(stock.expectedReturn) || !Number.isFinite(stock.stdDev)) {
-            alert(`${stock.ticker} 정보를 안정적으로 불러오지 못했습니다. 다시 시도해주세요.`);
+          // 중복 체크
+          if (customStocks.some((s) => s.ticker === normalizedStock.ticker)) {
+            alert(`${normalizedStock.ticker}는 이미 포트폴리오에 있습니다.`);
+            return;
+          }
+
+          if (!Number.isFinite(normalizedStock.expectedReturn) || !Number.isFinite(normalizedStock.stdDev)) {
+            alert(`${normalizedStock.ticker} 정보를 안정적으로 불러오지 못했습니다. 다시 시도해주세요.`);
             return;
           }
 
           setPortfolio({
             ...portfolio,
-            customStocks: [...customStocks, stock],
+            customStocks: [...customStocks, normalizedStock],
           });
         }}
       />

@@ -3,6 +3,22 @@ import { searchStocks, getStockInfo } from '../services/stockApiService';
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts';
 import { useSimulator } from '../contexts/SimulatorContext';
 
+const toFiniteNumber = (value, fallback = 0) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+};
+
+const toNullablePositiveNumber = (value) => {
+  if (value === null || value === undefined || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : null;
+};
+
+const normalizeTicker = (value) => {
+  const ticker = typeof value === 'string' ? value.trim().toUpperCase() : '';
+  return ticker || null;
+};
+
 const StockSearchModal = ({ isOpen, onClose, onAddStock }) => {
   const { theme } = useSimulator();
   const [searchQuery, setSearchQuery] = useState('');
@@ -100,6 +116,21 @@ const StockSearchModal = ({ isOpen, onClose, onAddStock }) => {
     }
   }, []);
 
+  const handleDirectTickerAdd = useCallback(async () => {
+    const normalizedTicker = searchQuery.trim().toUpperCase();
+    if (!normalizedTicker) {
+      setError('직접 추가할 티커를 입력해주세요.');
+      return;
+    }
+
+    await handleSelectStock({
+      ticker: normalizedTicker,
+      name: `${normalizedTicker} (직접 추가)`,
+      type: 'ETF',
+      exchange: 'DIRECT',
+    });
+  }, [handleSelectStock, searchQuery]);
+
   // 모달 닫기
   const handleClose = useCallback(() => {
     searchAbortRef.current?.abort();
@@ -118,14 +149,22 @@ const StockSearchModal = ({ isOpen, onClose, onAddStock }) => {
   const handleAddToPortfolio = useCallback(() => {
     if (!stockInfo) return;
 
+    const ticker = normalizeTicker(stockInfo.ticker);
+    if (!ticker) {
+      setError('종목 티커를 확인하지 못했습니다. 다시 검색해주세요.');
+      return;
+    }
+
     const stockToAdd = {
-      ticker: stockInfo.ticker,
-      name: stockInfo.name,
-      allocation: allocation,
-      expectedReturn: stockInfo.expectedReturn,
-      stdDev: stockInfo.stdDev,
-      volatilityLevel: stockInfo.volatilityLevel,
-      color: stockInfo.color,
+      ticker,
+      name: stockInfo.name || ticker,
+      allocation: Math.max(0, Math.min(100, toFiniteNumber(allocation, 0))),
+      monthlyAmount: 0,
+      initialAmount: 0,
+      expectedReturn: toFiniteNumber(stockInfo.expectedReturn, 0),
+      stdDev: Math.max(0, toFiniteNumber(stockInfo.stdDev, 0)),
+      volatilityLevel: stockInfo.volatilityLevel || 'medium',
+      color: stockInfo.color || '#8b5cf6',
     };
 
     onAddStock(stockToAdd);
@@ -148,6 +187,12 @@ const StockSearchModal = ({ isOpen, onClose, onAddStock }) => {
     'medium': { text: '중간', color: 'text-yellow-600', bg: 'bg-yellow-100' },
     'high': { text: '높음', color: 'text-red-500', bg: 'bg-red-50' },
   };
+
+  const selectedTicker = normalizeTicker(stockInfo?.ticker);
+  const selectedExpectedReturn = toFiniteNumber(stockInfo?.expectedReturn, 0);
+  const selectedStdDev = Math.max(0, toFiniteNumber(stockInfo?.stdDev, 0));
+  const selectedCurrentPrice = toNullablePositiveNumber(stockInfo?.currentPrice);
+  const selectedVolatilityLabel = volatilityLabels[stockInfo?.volatilityLevel] || volatilityLabels.medium;
 
   if (!isOpen) return null;
 
@@ -203,6 +248,13 @@ const StockSearchModal = ({ isOpen, onClose, onAddStock }) => {
               )}
               검색
             </button>
+            <button
+              onClick={handleDirectTickerAdd}
+              disabled={isSearching || !searchQuery.trim()}
+              className="px-4 py-3 border border-gray-200 bg-white text-gray-700 font-semibold rounded-xl hover:bg-gray-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              직접 추가
+            </button>
           </div>
         </div>
 
@@ -220,28 +272,39 @@ const StockSearchModal = ({ isOpen, onClose, onAddStock }) => {
             </div>
           )}
 
+          {!selectedStock && searchQuery.trim() && (
+            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+              검색이 안 잡히면 <span className="font-semibold">직접 추가</span>로 티커를 바로 불러올 수 있어요. SPYM은 코드에서 VOO 추종으로 매핑됩니다.
+            </div>
+          )}
+
           {/* 검색 결과 */}
           {!selectedStock && searchResults.length > 0 && (
             <div className="space-y-2">
               <div className="text-sm text-gray-500 mb-2">검색 결과</div>
-              {searchResults.map((stock) => (
+              {searchResults.map((stock) => {
+                const ticker = normalizeTicker(stock.ticker);
+                if (!ticker) return null;
+
+                return (
                 <button
-                  key={stock.ticker}
+                  key={ticker}
                   onClick={() => handleSelectStock(stock)}
                   className="w-full p-3 flex items-center gap-3 bg-gray-50 hover:bg-blue-50 rounded-lg transition text-left"
                 >
                   <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">
-                    {stock.ticker.slice(0, 3)}
+                    {ticker.slice(0, 3)}
                   </div>
                   <div className="flex-1">
-                    <div className="font-semibold text-gray-900">{stock.ticker}</div>
-                    <div className="text-sm text-gray-500">{stock.name}</div>
+                    <div className="font-semibold text-gray-900">{ticker}</div>
+                    <div className="text-sm text-gray-500">{stock.name || ticker}</div>
                   </div>
                   <div className="text-xs text-gray-400 px-2 py-1 bg-gray-200 rounded">
-                    {stock.type}
+                    {stock.type || 'UNKNOWN'}
                   </div>
                 </button>
-              ))}
+                );
+              })}
             </div>
           )}
 
@@ -279,18 +342,18 @@ const StockSearchModal = ({ isOpen, onClose, onAddStock }) => {
                         className="w-14 h-14 rounded-xl flex items-center justify-center text-white font-bold text-lg"
                         style={{ backgroundColor: stockInfo.color }}
                       >
-                        {stockInfo.ticker.slice(0, 3)}
+                        {(selectedTicker || 'N/A').slice(0, 3)}
                       </div>
                       <div className="flex-1">
-                        <div className="font-bold text-lg text-gray-900">{stockInfo.ticker}</div>
-                        <div className="text-sm text-gray-600">{stockInfo.name}</div>
-                        <div className="text-xs text-gray-400">{stockInfo.exchange}</div>
+                        <div className="font-bold text-lg text-gray-900">{selectedTicker || 'N/A'}</div>
+                        <div className="text-sm text-gray-600">{stockInfo.name || selectedTicker || '이름 없음'}</div>
+                        <div className="text-xs text-gray-400">{stockInfo.exchange || '-'}</div>
                       </div>
                       <div className="text-right">
                         <div className="text-xl font-bold text-gray-900">
-                          ${stockInfo.currentPrice?.toFixed(2)}
+                          {selectedCurrentPrice ? `$${selectedCurrentPrice.toFixed(2)}` : '-'}
                         </div>
-                        <div className="text-xs text-gray-500">{stockInfo.currency}</div>
+                        <div className="text-xs text-gray-500">{stockInfo.currency || 'USD'}</div>
                       </div>
                     </div>
                   </div>
@@ -299,19 +362,19 @@ const StockSearchModal = ({ isOpen, onClose, onAddStock }) => {
                   <div className="grid grid-cols-2 gap-3">
                     <div className="bg-white border border-gray-200 rounded-xl p-4">
                       <div className="text-xs text-gray-500 mb-1">예상 연간 수익률</div>
-                      <div className={`text-2xl font-bold ${stockInfo.expectedReturn >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {stockInfo.expectedReturn >= 0 ? '+' : ''}{stockInfo.expectedReturn.toFixed(1)}%
+                      <div className={`text-2xl font-bold ${selectedExpectedReturn >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {selectedExpectedReturn >= 0 ? '+' : ''}{selectedExpectedReturn.toFixed(1)}%
                       </div>
                       <div className="text-xs text-gray-400 mt-1">최근 1년 기준</div>
                     </div>
                     <div className="bg-white border border-gray-200 rounded-xl p-4">
                       <div className="text-xs text-gray-500 mb-1">변동성 (표준편차)</div>
                       <div className="text-2xl font-bold text-orange-600">
-                        {stockInfo.stdDev.toFixed(1)}%
+                        {selectedStdDev.toFixed(1)}%
                       </div>
                       {stockInfo.volatilityLevel && (
-                        <div className={`text-xs mt-1 px-2 py-0.5 rounded inline-block ${volatilityLabels[stockInfo.volatilityLevel].bg} ${volatilityLabels[stockInfo.volatilityLevel].color}`}>
-                          {volatilityLabels[stockInfo.volatilityLevel].text}
+                        <div className={`text-xs mt-1 px-2 py-0.5 rounded inline-block ${selectedVolatilityLabel.bg} ${selectedVolatilityLabel.color}`}>
+                          {selectedVolatilityLabel.text}
                         </div>
                       )}
                     </div>
@@ -421,7 +484,7 @@ const StockSearchModal = ({ isOpen, onClose, onAddStock }) => {
               onClick={handleAddToPortfolio}
               className="w-full py-3 px-6 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-purple-700 transition shadow-lg"
             >
-              포트폴리오에 추가 ({stockInfo.ticker} {allocation}%)
+              포트폴리오에 추가 ({selectedTicker || 'N/A'} {allocation}%)
             </button>
           </div>
         )}

@@ -1,7 +1,8 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useSimulator } from '../../contexts/SimulatorContext';
 import Card from '../ui/Card';
 import SnowballAnimation from '../SnowballAnimation';
+import { getStockInfo, getMultipleHistoricalData, getUsdKrwRate, getTickerAlias, MARKET_RETRY_MS, MARKET_REFRESH_MS } from '../../services/stockApiService';
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -14,7 +15,7 @@ import {
   ReferenceLine,
 } from 'recharts';
 import {
-  calculateMonthlyReturns,
+  calculateMonthlyAverageReturnsByMonth,
   calculateStats,
   projectFutureWealth,
   downloadCSV,
@@ -25,10 +26,14 @@ import {
   dateToYearFraction,
 } from '../../utils/assetTracking';
 
+const parseAssetDate = (dateString) => (dateString?.length === 7 ? new Date(`${dateString}-01`) : new Date(dateString));
+
 const AssetTrackingView = () => {
   const {
     assetRecords,
     setAssetRecords,
+    trackedStockPortfolio,
+    setTrackedStockPortfolio,
     theme,
   } = useSimulator();
 
@@ -36,6 +41,8 @@ const AssetTrackingView = () => {
   const [newDate, setNewDate] = useState(getCurrentDate());
   const [newAssetValue, setNewAssetValue] = useState('');
   const [newPrincipal, setNewPrincipal] = useState('');
+  const [newContribution, setNewContribution] = useState('');
+  const [excludeFromMonthlyAverage, setExcludeFromMonthlyAverage] = useState(false);
   const [newMemo, setNewMemo] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [showProjection, setShowProjection] = useState(true);
@@ -43,6 +50,18 @@ const AssetTrackingView = () => {
   const [monthlyContribution, setMonthlyContribution] = useState(100);
   const [useManualReturn, setUseManualReturn] = useState(false);
   const [manualReturnRate, setManualReturnRate] = useState('');
+  const [trackedTicker, setTrackedTicker] = useState('');
+  const [trackedShares, setTrackedShares] = useState('');
+  const [trackedAverageBuyPrice, setTrackedAverageBuyPrice] = useState('');
+  const [trackedManualCurrentPrice, setTrackedManualCurrentPrice] = useState('');
+  const [isAddingTrackedStock, setIsAddingTrackedStock] = useState(false);
+  const [trackedPortfolioLoading, setTrackedPortfolioLoading] = useState(false);
+  const [trackedPortfolioError, setTrackedPortfolioError] = useState('');
+  const [trackedHistoryMap, setTrackedHistoryMap] = useState({});
+  const [trackedPositionDrafts, setTrackedPositionDrafts] = useState({});
+  const [isFetchingUsdKrwRate, setIsFetchingUsdKrwRate] = useState(false);
+  const trackedRefreshTimerRef = useRef(null);
+  const fxRefreshTimerRef = useRef(null);
 
   const fileInputRef = useRef(null);
 
@@ -61,26 +80,235 @@ const AssetTrackingView = () => {
   const tooltipTrendClass = isDark ? 'text-emerald-300' : 'text-emerald-600';
   const tooltipProjectionClass = isDark ? 'text-purple-300' : 'text-purple-600';
   const tooltipExtendedClass = isDark ? 'text-emerald-200' : 'text-emerald-400';
+  const trackedPositions = useMemo(
+    () => trackedStockPortfolio?.positions || [],
+    [trackedStockPortfolio]
+  );
+  const usdKrwRate = Number(trackedStockPortfolio?.usdKrwRate) || 1380;
+  const sortedAssetRecords = useMemo(
+    () => [...assetRecords].sort((a, b) => a.date.localeCompare(b.date)),
+    [assetRecords]
+  );
 
   // 계산된 데이터
-  const recordsWithReturns = calculateMonthlyReturns(assetRecords);
+  const recordsWithReturns = calculateMonthlyAverageReturnsByMonth(assetRecords);
   const stats = calculateStats(assetRecords);
-  const projections = showProjection
-    ? projectFutureWealth(
-        assetRecords,
-        projectionMonths,
-        monthlyContribution,
-        useManualReturn && manualReturnRate !== '' ? parseFloat(manualReturnRate) : null
-      )
-    : [];
+  const projections = useMemo(() => (
+    showProjection
+      ? projectFutureWealth(
+          assetRecords,
+          projectionMonths,
+          monthlyContribution,
+          useManualReturn && manualReturnRate !== '' ? parseFloat(manualReturnRate) : null
+        )
+      : []
+  ), [assetRecords, manualReturnRate, monthlyContribution, projectionMonths, showProjection, useManualReturn]);
 
   // 회귀 분석 계산
-  const { trendLine, regression, baseDate } = calculateTrendLine(assetRecords);
+  const { trendLine, regression } = calculateTrendLine(assetRecords);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (trackedRefreshTimerRef.current) {
+      clearTimeout(trackedRefreshTimerRef.current);
+      trackedRefreshTimerRef.current = null;
+    }
+
+    if (trackedPositions.length === 0) {
+      setTrackedHistoryMap({});
+      setTrackedPortfolioLoading(false);
+      return undefined;
+    }
+
+    const loadTrackedHistories = async () => {
+      setTrackedPortfolioLoading(true);
+      setTrackedPortfolioError('');
+
+      try {
+        const nextHistoryMap = await getMultipleHistoricalData(
+          trackedPositions.map((position) => position.ticker),
+          '1y',
+          (ticker) => {
+            const position = trackedPositions.find((item) => item.ticker === ticker);
+            return position?.manualCurrentPrice
+              ? { manualCurrentPrice: position.manualCurrentPrice }
+              : {};
+          }
+        );
+
+        if (cancelled) return;
+
+        setTrackedHistoryMap(nextHistoryMap);
+
+        const missingTickers = trackedPositions
+          .map((position) => position.ticker)
+          .filter((ticker) => !nextHistoryMap[ticker] || nextHistoryMap[ticker].length === 0);
+
+        if (missingTickers.length > 0) {
+          setTrackedPortfolioError(`${missingTickers.join(', ')} 가격 히스토리를 불러오지 못했어요.`);
+          trackedRefreshTimerRef.current = window.setTimeout(() => {
+            if (!cancelled) {
+              loadTrackedHistories();
+            }
+          }, MARKET_RETRY_MS);
+        } else {
+          trackedRefreshTimerRef.current = window.setTimeout(() => {
+            if (!cancelled) {
+              loadTrackedHistories();
+            }
+          }, MARKET_REFRESH_MS);
+        }
+      } catch (error) {
+        if (cancelled) return;
+        setTrackedHistoryMap({});
+        setTrackedPortfolioError(error?.message || '자동 추적 포트폴리오 데이터를 불러오지 못했어요.');
+        trackedRefreshTimerRef.current = window.setTimeout(() => {
+          if (!cancelled) {
+            loadTrackedHistories();
+          }
+        }, MARKET_RETRY_MS);
+      } finally {
+        if (!cancelled) {
+          setTrackedPortfolioLoading(false);
+        }
+      }
+    };
+
+    loadTrackedHistories();
+
+    return () => {
+      cancelled = true;
+      if (trackedRefreshTimerRef.current) {
+        clearTimeout(trackedRefreshTimerRef.current);
+        trackedRefreshTimerRef.current = null;
+      }
+    };
+  }, [trackedPositions]);
+
+  useEffect(() => {
+    if (fxRefreshTimerRef.current) {
+      clearTimeout(fxRefreshTimerRef.current);
+      fxRefreshTimerRef.current = null;
+    }
+
+    if (trackedPositions.length === 0) {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    const scheduleNext = (delay) => {
+      fxRefreshTimerRef.current = window.setTimeout(() => {
+        if (!cancelled) {
+          loadLatestFx();
+        }
+      }, delay);
+    };
+
+    const loadLatestFx = async () => {
+      try {
+        const latestRate = await getUsdKrwRate();
+        if (cancelled) return;
+        setTrackedStockPortfolio((prev) => ({
+          ...prev,
+          usdKrwRate: Math.round(latestRate * 10) / 10,
+        }));
+        scheduleNext(MARKET_REFRESH_MS);
+      } catch {
+        if (cancelled) return;
+        scheduleNext(MARKET_RETRY_MS);
+      }
+    };
+
+    loadLatestFx();
+
+    return () => {
+      cancelled = true;
+      if (fxRefreshTimerRef.current) {
+        clearTimeout(fxRefreshTimerRef.current);
+        fxRefreshTimerRef.current = null;
+      }
+    };
+  }, [setTrackedStockPortfolio, trackedPositions.length]);
+
+  const trackedPortfolioSeries = useMemo(() => {
+    if (trackedPositions.length === 0) return [];
+
+    const dailyTotals = new Map();
+
+    trackedPositions.forEach((position) => {
+      const history = trackedHistoryMap[position.ticker] || [];
+      const fxRate = position.currency === 'KRW' ? 1 : usdKrwRate;
+
+      history.forEach((point) => {
+        const price = Number(point.price);
+        if (!Number.isFinite(price)) return;
+
+        const valueManwon = (Number(position.shares) || 0) * price * fxRate / 10000;
+        const existing = dailyTotals.get(point.date) || 0;
+        dailyTotals.set(point.date, existing + valueManwon);
+      });
+    });
+
+    return [...dailyTotals.entries()]
+      .map(([date, value]) => ({ date, value }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }, [trackedHistoryMap, trackedPositions, usdKrwRate]);
+
+  const trackedPortfolioSummary = useMemo(() => {
+    const positions = trackedPositions.map((position) => {
+      const history = trackedHistoryMap[position.ticker] || [];
+      const latestPrice = history[history.length - 1]?.price ?? null;
+      const fxRate = position.currency === 'KRW' ? 1 : usdKrwRate;
+      const invested = (Number(position.shares) || 0) * (Number(position.averageBuyPrice) || 0) * fxRate / 10000;
+      const currentValue = latestPrice !== null
+        ? (Number(position.shares) || 0) * latestPrice * fxRate / 10000
+        : null;
+      const profit = currentValue !== null ? currentValue - invested : null;
+      const returnPercent = currentValue !== null && invested > 0
+        ? (profit / invested) * 100
+        : null;
+
+      return {
+        ...position,
+        manualCurrentPrice: position.manualCurrentPrice || null,
+        latestPrice,
+        invested,
+        currentValue,
+        profit,
+        returnPercent,
+      };
+    });
+
+    const invested = positions.reduce((sum, position) => sum + position.invested, 0);
+    const currentValue = positions.reduce((sum, position) => sum + (position.currentValue || 0), 0);
+    const profit = currentValue - invested;
+
+    return {
+      positions,
+      invested,
+      currentValue,
+      profit,
+      returnPercent: invested > 0 ? (profit / invested) * 100 : 0,
+    };
+  }, [trackedHistoryMap, trackedPositions, usdKrwRate]);
+
+  const chartBaseDate = useMemo(() => {
+    const candidates = [
+      sortedAssetRecords[0]?.date,
+      projections[0]?.date,
+    ].filter(Boolean);
+
+    if (candidates.length === 0) return null;
+
+    return [...candidates].sort((a, b) => parseAssetDate(a) - parseAssetDate(b))[0];
+  }, [sortedAssetRecords, projections]);
 
   // 차트 데이터 - yearFraction을 X축으로 사용
-  const chartData = [
+  const manualChartData = useMemo(() => ([
     ...recordsWithReturns.map(r => {
-      const yearFraction = baseDate ? dateToYearFraction(r.date, baseDate) : 0;
+      const yearFraction = chartBaseDate ? dateToYearFraction(r.date, chartBaseDate) : 0;
       const trend = trendLine.find(t => t.date === r.date);
       return {
         date: r.date,
@@ -91,7 +319,7 @@ const AssetTrackingView = () => {
       };
     }),
     ...projections.map(p => {
-      const yearFraction = baseDate ? dateToYearFraction(p.date, baseDate) : 0;
+      const yearFraction = chartBaseDate ? dateToYearFraction(p.date, chartBaseDate) : 0;
       // 예측 구간의 추세선 연장
       const extendedTrendValue = regression
         ? (regression.slope * yearFraction + regression.intercept) / 10000
@@ -104,7 +332,17 @@ const AssetTrackingView = () => {
         isProjection: true,
       };
     }),
-  ];
+  ]), [chartBaseDate, projections, recordsWithReturns, regression, trendLine]);
+
+  const chartData = manualChartData;
+
+  const trackedChartBaseDate = trackedPortfolioSeries[0]?.date || null;
+
+  const trackedChartData = useMemo(() => trackedPortfolioSeries.map((point) => ({
+    date: point.date,
+    yearFraction: trackedChartBaseDate ? dateToYearFraction(point.date, trackedChartBaseDate) : 0,
+    trackedPortfolioValue: point.value / 10000,
+  })), [trackedChartBaseDate, trackedPortfolioSeries]);
 
   // 기록 추가/수정
   const handleSaveRecord = () => {
@@ -114,8 +352,10 @@ const AssetTrackingView = () => {
       newDate,
       parseFloat(newAssetValue),
       parseFloat(newPrincipal) || 0,
-      0, // contribution은 자동 계산
-      newMemo
+      parseFloat(newContribution) || 0,
+      newMemo,
+      true,
+      excludeFromMonthlyAverage
     );
 
     if (editingId) {
@@ -133,6 +373,8 @@ const AssetTrackingView = () => {
     setNewDate(getCurrentDate());
     setNewAssetValue('');
     setNewPrincipal('');
+    setNewContribution('');
+    setExcludeFromMonthlyAverage(false);
     setNewMemo('');
   };
 
@@ -149,6 +391,8 @@ const AssetTrackingView = () => {
     setNewDate(record.date);
     setNewAssetValue(String(record.assetValue));
     setNewPrincipal(String(record.principal || ''));
+    setNewContribution(String(record.contribution || ''));
+    setExcludeFromMonthlyAverage(Boolean(record.excludeFromMonthlyAverage));
     setNewMemo(record.memo || '');
   };
 
@@ -193,6 +437,169 @@ const AssetTrackingView = () => {
     }
   };
 
+  const handleUsdKrwRateChange = useCallback((value) => {
+    setTrackedStockPortfolio((prev) => ({
+      ...prev,
+      usdKrwRate: Number(value) > 0 ? Number(value) : prev.usdKrwRate,
+    }));
+  }, [setTrackedStockPortfolio]);
+
+  const handleFetchUsdKrwRate = useCallback(async () => {
+    setIsFetchingUsdKrwRate(true);
+    setTrackedPortfolioError('');
+
+    try {
+      const latestRate = await getUsdKrwRate();
+      setTrackedStockPortfolio((prev) => ({
+        ...prev,
+        usdKrwRate: Math.round(latestRate * 10) / 10,
+      }));
+    } catch (error) {
+      setTrackedPortfolioError(error?.message || 'USD/KRW 환율을 불러오지 못했어요.');
+    } finally {
+      setIsFetchingUsdKrwRate(false);
+    }
+  }, [setTrackedStockPortfolio]);
+
+  const handleAddTrackedStock = useCallback(async () => {
+    const normalizedTicker = trackedTicker.trim().toUpperCase();
+    const shares = Number(trackedShares);
+    const averageBuyPrice = Number(trackedAverageBuyPrice);
+    const manualCurrentPrice = Number(trackedManualCurrentPrice);
+    const alias = getTickerAlias(normalizedTicker);
+
+    if (!normalizedTicker || shares <= 0 || averageBuyPrice <= 0) {
+      setTrackedPortfolioError('티커, 보유 수량, 평균 매수가를 올바르게 입력해주세요.');
+      return;
+    }
+
+    if (alias && manualCurrentPrice <= 0) {
+      setTrackedPortfolioError(`${normalizedTicker}은(는) 현재가를 직접 입력해주세요.`);
+      return;
+    }
+
+    if (trackedPositions.some((position) => position.ticker === normalizedTicker)) {
+      setTrackedPortfolioError(`${normalizedTicker}는 이미 자동 추적 포트폴리오에 있습니다.`);
+      return;
+    }
+
+    setIsAddingTrackedStock(true);
+    setTrackedPortfolioError('');
+
+    try {
+      const stockInfo = await getStockInfo(normalizedTicker, alias && manualCurrentPrice > 0
+        ? { manualCurrentPrice }
+        : {});
+
+      setTrackedStockPortfolio((prev) => ({
+        ...prev,
+        positions: [
+          ...prev.positions,
+          {
+            id: `tracked-stock-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            ticker: stockInfo.ticker,
+            name: stockInfo.name,
+            shares,
+            averageBuyPrice,
+            manualCurrentPrice: alias && manualCurrentPrice > 0 ? manualCurrentPrice : null,
+            currency: stockInfo.currency || 'USD',
+            exchange: stockInfo.exchange || '',
+            color: stockInfo.color || '#f59e0b',
+          },
+        ],
+      }));
+
+      setTrackedTicker('');
+      setTrackedShares('');
+      setTrackedAverageBuyPrice('');
+      setTrackedManualCurrentPrice('');
+    } catch (error) {
+      setTrackedPortfolioError(error?.message || '종목 정보를 불러오지 못했어요.');
+    } finally {
+      setIsAddingTrackedStock(false);
+    }
+  }, [trackedAverageBuyPrice, trackedManualCurrentPrice, trackedPositions, trackedShares, trackedTicker, setTrackedStockPortfolio]);
+
+  const clearTrackedPositionDraft = useCallback((positionId, field) => {
+    setTrackedPositionDrafts((prev) => {
+      const current = prev[positionId];
+      if (!current || !(field in current)) return prev;
+
+      const nextForPosition = { ...current };
+      delete nextForPosition[field];
+
+      const next = { ...prev };
+      if (Object.keys(nextForPosition).length === 0) {
+        delete next[positionId];
+      } else {
+        next[positionId] = nextForPosition;
+      }
+
+      return next;
+    });
+  }, []);
+
+  const handleTrackedPositionDraftChange = useCallback((positionId, field, value) => {
+    setTrackedPositionDrafts((prev) => ({
+      ...prev,
+      [positionId]: {
+        ...prev[positionId],
+        [field]: value,
+      },
+    }));
+  }, []);
+
+  const commitTrackedPositionDraft = useCallback((positionId, field) => {
+    const draftValue = trackedPositionDrafts[positionId]?.[field];
+    if (draftValue === undefined) return;
+
+    const nextValue = Number(draftValue);
+    const label = field === 'shares' ? '보유 수량' : '평균 매수가';
+
+    if (!Number.isFinite(nextValue) || nextValue <= 0) {
+      setTrackedPortfolioError(`${label}은(는) 0보다 큰 숫자로 입력해주세요.`);
+      clearTrackedPositionDraft(positionId, field);
+      return;
+    }
+
+    setTrackedStockPortfolio((prev) => ({
+      ...prev,
+      positions: prev.positions.map((position) => (
+        position.id === positionId
+          ? { ...position, [field]: nextValue }
+          : position
+      )),
+    }));
+    setTrackedPortfolioError('');
+    clearTrackedPositionDraft(positionId, field);
+  }, [clearTrackedPositionDraft, setTrackedStockPortfolio, trackedPositionDrafts]);
+
+  const handleTrackedPositionInputKeyDown = useCallback((event, positionId, field) => {
+    if (event.key === 'Enter') {
+      event.currentTarget.blur();
+    }
+
+    if (event.key === 'Escape') {
+      event.currentTarget.dataset.cancelEdit = 'true';
+      clearTrackedPositionDraft(positionId, field);
+      event.currentTarget.blur();
+    }
+  }, [clearTrackedPositionDraft]);
+
+  const handleRemoveTrackedStock = useCallback((id) => {
+    setTrackedPositionDrafts((prev) => {
+      if (!prev[id]) return prev;
+
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+    setTrackedStockPortfolio((prev) => ({
+      ...prev,
+      positions: prev.positions.filter((position) => position.id !== id),
+    }));
+  }, [setTrackedStockPortfolio]);
+
   const formatMoney = (value) => {
     if (value >= 10000) {
       return `${(value / 10000).toFixed(2)}억`;
@@ -205,6 +612,14 @@ const AssetTrackingView = () => {
     const sign = value >= 0 ? '+' : '';
     return `${sign}${value.toFixed(2)}%`;
   };
+
+  const formatTrackedPrice = (value, currency = 'USD') => {
+    if (value === null || value === undefined || Number.isNaN(Number(value))) return '-';
+    const prefix = currency === 'KRW' ? '₩' : '$';
+    return `${prefix}${Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+  };
+
+  const editableNumberInputClass = 'w-28 rounded-lg border border-transparent bg-transparent px-2 py-1 text-right text-sm text-gray-700 transition hover:border-amber-200 hover:bg-amber-50 focus:border-amber-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-100';
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -250,6 +665,219 @@ const AssetTrackingView = () => {
           </div>
         </div>
       </section>
+
+      <Card>
+        <div className="flex flex-col gap-5">
+          <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+            <div>
+              <h3 className="text-heading-3">🧾 자동 주식 추적 포트폴리오</h3>
+              <p className="text-sm text-gray-500">
+                프리셋과 별개로 저장됩니다. 여러 종목의 일별 평가금액을 불러와 자산 추이 차트에 별도 라인으로 표시합니다.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
+              <span className="text-xs font-semibold text-amber-700">USD/KRW</span>
+              <input
+                type="number"
+                min={1}
+                step="0.1"
+                value={usdKrwRate}
+                onChange={(e) => handleUsdKrwRateChange(e.target.value)}
+                className="w-24 rounded-lg border border-amber-200 bg-white px-2 py-1 text-sm font-semibold text-amber-900"
+              />
+              <span className="text-xs text-amber-700">원</span>
+              <button
+                type="button"
+                onClick={handleFetchUsdKrwRate}
+                disabled={isFetchingUsdKrwRate}
+                className="rounded-lg border border-amber-300 bg-white px-2.5 py-1 text-xs font-semibold text-amber-800 transition hover:bg-amber-100 disabled:opacity-50"
+              >
+                {isFetchingUsdKrwRate ? '가져오는 중...' : '가져오기'}
+              </button>
+            </div>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-[minmax(0,1.2fr)_minmax(0,0.7fr)_minmax(0,0.7fr)_minmax(0,0.7fr)_auto]">
+            <div>
+              <label className="mb-1 block text-xs text-gray-600">티커</label>
+              <input
+                type="text"
+                value={trackedTicker}
+                onChange={(e) => setTrackedTicker(e.target.value.toUpperCase())}
+                placeholder="VOO / AAPL / TSLA"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-gray-600">보유 수량</label>
+              <input
+                type="number"
+                min={0}
+                step="0.0001"
+                value={trackedShares}
+                onChange={(e) => setTrackedShares(e.target.value)}
+                placeholder="12.3456"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-gray-600">평균 매수가</label>
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                value={trackedAverageBuyPrice}
+                onChange={(e) => setTrackedAverageBuyPrice(e.target.value)}
+                placeholder="420.15"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-gray-600">현재가 (SPYM/TIGERSP500 전용)</label>
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                value={trackedManualCurrentPrice}
+                onChange={(e) => setTrackedManualCurrentPrice(e.target.value)}
+                placeholder="별칭 ETF 현재가"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              />
+            </div>
+            <div className="flex items-end">
+              <button
+                type="button"
+                onClick={handleAddTrackedStock}
+                disabled={isAddingTrackedStock}
+                className="w-full rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-600 disabled:opacity-50 md:w-auto"
+              >
+                {isAddingTrackedStock ? '추가 중...' : '종목 추가'}
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div className="rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-yellow-50 p-4">
+              <div className="text-xs text-amber-700">자동 추적 현재 평가금액</div>
+              <div className="mt-1 text-2xl font-black text-amber-900">{formatMoney(trackedPortfolioSummary.currentValue)}</div>
+              <div className="mt-1 text-xs text-amber-700">{trackedPositions.length}개 종목</div>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-xs text-slate-500">자동 추적 원금</div>
+              <div className="mt-1 text-2xl font-black text-slate-900">{formatMoney(trackedPortfolioSummary.invested)}</div>
+              <div className="mt-1 text-xs text-slate-500">평균 매수가 기준</div>
+            </div>
+            <div className="rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-green-50 p-4">
+              <div className="text-xs text-emerald-700">자동 추적 손익</div>
+              <div className={`mt-1 text-2xl font-black ${trackedPortfolioSummary.profit >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                {trackedPortfolioSummary.profit >= 0 ? '+' : ''}{formatMoney(trackedPortfolioSummary.profit)}
+              </div>
+              <div className="mt-1 text-xs text-emerald-700">{formatPercent(trackedPortfolioSummary.returnPercent)}</div>
+            </div>
+          </div>
+
+          {trackedPortfolioLoading && (
+            <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+              자동 추적 포트폴리오 가격 데이터를 불러오는 중입니다...
+            </div>
+          )}
+
+          {trackedPortfolioError && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+              {trackedPortfolioError}
+            </div>
+          )}
+
+          {trackedPositions.length > 0 ? (
+            <div className="overflow-x-auto rounded-2xl border border-gray-200">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700">종목</th>
+                    <th className="px-4 py-3 text-right font-semibold text-gray-700">보유 수량</th>
+                    <th className="px-4 py-3 text-right font-semibold text-gray-700">평균 매수가</th>
+                    <th className="px-4 py-3 text-right font-semibold text-gray-700">수동 현재가</th>
+                    <th className="px-4 py-3 text-right font-semibold text-gray-700">현재가</th>
+                    <th className="px-4 py-3 text-right font-semibold text-gray-700">평가금액</th>
+                    <th className="px-4 py-3 text-right font-semibold text-gray-700">손익률</th>
+                    <th className="px-4 py-3" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {trackedPortfolioSummary.positions.map((position) => (
+                    <tr key={position.id} className="border-t border-gray-100">
+                      <td className="px-4 py-3">
+                        <div className="font-semibold text-gray-900">{position.ticker}</div>
+                        <div className="text-xs text-gray-500">{position.name}{position.exchange ? ` · ${position.exchange}` : ''}</div>
+                      </td>
+                      <td className="px-4 py-3 text-right text-gray-700">
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.0001"
+                          aria-label={`${position.ticker} 보유 수량 수정`}
+                          value={trackedPositionDrafts[position.id]?.shares ?? position.shares}
+                          onChange={(e) => handleTrackedPositionDraftChange(position.id, 'shares', e.target.value)}
+                          onBlur={(e) => {
+                            if (e.currentTarget.dataset.cancelEdit === 'true') {
+                              delete e.currentTarget.dataset.cancelEdit;
+                              return;
+                            }
+                            commitTrackedPositionDraft(position.id, 'shares');
+                          }}
+                          onKeyDown={(e) => handleTrackedPositionInputKeyDown(e, position.id, 'shares')}
+                          className={editableNumberInputClass}
+                        />
+                      </td>
+                      <td className="px-4 py-3 text-right text-gray-700">
+                        <div className="inline-flex items-center justify-end gap-1">
+                          <span className="text-xs text-gray-400">{position.currency === 'KRW' ? '₩' : '$'}</span>
+                          <input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            aria-label={`${position.ticker} 평균 매수가 수정`}
+                            value={trackedPositionDrafts[position.id]?.averageBuyPrice ?? position.averageBuyPrice}
+                            onChange={(e) => handleTrackedPositionDraftChange(position.id, 'averageBuyPrice', e.target.value)}
+                            onBlur={(e) => {
+                              if (e.currentTarget.dataset.cancelEdit === 'true') {
+                                delete e.currentTarget.dataset.cancelEdit;
+                                return;
+                              }
+                              commitTrackedPositionDraft(position.id, 'averageBuyPrice');
+                            }}
+                            onKeyDown={(e) => handleTrackedPositionInputKeyDown(e, position.id, 'averageBuyPrice')}
+                            className={editableNumberInputClass}
+                          />
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-right text-gray-700">{position.manualCurrentPrice ? formatTrackedPrice(position.manualCurrentPrice, position.currency) : '-'}</td>
+                      <td className="px-4 py-3 text-right text-gray-700">{formatTrackedPrice(position.latestPrice, position.currency)}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-amber-700">{position.currentValue !== null ? formatMoney(position.currentValue) : '-'}</td>
+                      <td className={`px-4 py-3 text-right font-semibold ${position.returnPercent >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                        {formatPercent(position.returnPercent)}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveTrackedStock(position.id)}
+                          className="rounded-lg px-2 py-1 text-xs font-semibold text-red-600 transition hover:bg-red-50"
+                        >
+                          삭제
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-gray-300 px-4 py-8 text-center text-sm text-gray-500">
+              아직 자동 추적 종목이 없습니다. 티커, 수량, 평균 매수가를 입력해 추가하세요.
+            </div>
+          )}
+        </div>
+      </Card>
 
       {/* 스노우볼 애니메이션 */}
       {recordsWithReturns.length > 0 && (
@@ -446,6 +1074,77 @@ const AssetTrackingView = () => {
         </Card>
       )}
 
+      {trackedChartData.length > 0 && (
+        <Card>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-heading-3">📊 자동 추적 포트폴리오 추이</h3>
+              <p className="text-sm text-gray-500">수동 자산 기록/예측과 분리된 별도 차트입니다.</p>
+            </div>
+            <div className="text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-3 py-1">
+              기준 환율 {usdKrwRate.toLocaleString()}원
+            </div>
+          </div>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={trackedChartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="trackedPortfolioGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.28} />
+                    <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.05} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
+                <XAxis
+                  dataKey="yearFraction"
+                  type="number"
+                  domain={['dataMin', 'dataMax']}
+                  tick={{ fill: chartColors.tick, fontSize: 11 }}
+                  tickLine={false}
+                  axisLine={{ stroke: chartColors.axis }}
+                  tickFormatter={(val) => {
+                    const years = Math.floor(val);
+                    const months = Math.round((val - years) * 12);
+                    if (val === 0) return '시작';
+                    if (months === 0) return `${years}년`;
+                    return `${years}년${months}월`;
+                  }}
+                />
+                <YAxis
+                  tickFormatter={(v) => `${v.toFixed(1)}억`}
+                  tick={{ fontSize: 11, fill: chartColors.tick }}
+                  axisLine={{ stroke: chartColors.axis }}
+                  tickLine={{ stroke: chartColors.axis }}
+                />
+                <Tooltip
+                  content={({ active, payload }) => {
+                    if (!active || !payload?.length) return null;
+                    const data = payload[0].payload;
+                    return (
+                      <div className={tooltipContainerClass}>
+                        <div className={tooltipTitleClass}>{data.date}</div>
+                        {data.trackedPortfolioValue != null && (
+                          <div className="text-amber-700">자동 추적 포트폴리오: {(data.trackedPortfolioValue * 10000).toLocaleString()}만원</div>
+                        )}
+                      </div>
+                    );
+                  }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="trackedPortfolioValue"
+                  stroke="#f59e0b"
+                  fill="url(#trackedPortfolioGradient)"
+                  strokeWidth={2.5}
+                  dot={false}
+                  name="자동 추적 포트폴리오"
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </Card>
+      )}
+
       {/* 기록 입력/관리 */}
       <Card variant="blue">
         <div className="flex items-center justify-between mb-4">
@@ -483,7 +1182,7 @@ const AssetTrackingView = () => {
         </div>
 
         {/* 입력 폼 */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4 p-4 bg-white/50 rounded-lg">
+        <div className="grid grid-cols-2 md:grid-cols-7 gap-3 mb-4 p-4 bg-white/50 rounded-lg">
           <div>
             <label className="block text-xs text-gray-600 mb-1">날짜</label>
             <input
@@ -514,6 +1213,16 @@ const AssetTrackingView = () => {
             />
           </div>
           <div>
+            <label className="block text-xs text-gray-600 mb-1">입출금 (만원)</label>
+            <input
+              type="number"
+              value={newContribution}
+              onChange={(e) => setNewContribution(e.target.value)}
+              placeholder="100 / -50"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+            />
+          </div>
+          <div>
             <label className="block text-xs text-gray-600 mb-1">메모</label>
             <input
               type="text"
@@ -523,6 +1232,15 @@ const AssetTrackingView = () => {
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
             />
           </div>
+          <label className="flex items-end gap-2 pb-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={excludeFromMonthlyAverage}
+              onChange={(e) => setExcludeFromMonthlyAverage(e.target.checked)}
+              className="w-4 h-4 rounded text-amber-600"
+            />
+            <span className="text-xs font-medium text-amber-700">월 평균 제외</span>
+          </label>
           <div className="flex items-end">
             <button
               onClick={handleSaveRecord}
@@ -534,8 +1252,19 @@ const AssetTrackingView = () => {
           </div>
         </div>
 
-        <div className="mb-3 text-xs text-gray-500">
-          월 수익률 = (현재 총자산 - 이전 총자산 - 투자금) ÷ 이전 총자산. 투자금은 원금 증가분(없으면 입력값) 기준입니다.
+        <div className="mb-3 space-y-1 text-xs text-gray-500">
+          <div>
+            월 수익률 = (현재 총자산 - 이전 총자산 - 입출금) ÷ 이전 총자산. 입출금은 이번 기록에 직접 넣은 순현금흐름(입금 +, 출금 -)입니다.
+          </div>
+          <div>
+            월 평균 수익률 = 같은 달에 입력된 월 수익률들의 평균값입니다. 입력일이 들쭉날쭉해도 월 기준 흐름을 보기 쉽게 보여줍니다.
+          </div>
+          <div>
+            `월 평균 제외`를 체크하면 해당 행의 월 수익률은 그대로 보이지만, 월 평균 수익률과 상단 월평균 통계에서는 제외됩니다.
+          </div>
+          <div>
+            기존 기록 중 직접 입력 전 데이터는 호환성을 위해 이전 방식(원금 증가분)으로 계산될 수 있습니다. 새로 수정/입력한 기록부터는 입출금 값이 우선 적용됩니다.
+          </div>
         </div>
 
         {/* 기록 테이블 */}
@@ -547,10 +1276,12 @@ const AssetTrackingView = () => {
                   <th className="text-left py-2 px-3 font-semibold text-gray-700">날짜</th>
                   <th className="text-right py-2 px-3 font-semibold text-gray-700">총 자산</th>
                   <th className="text-right py-2 px-3 font-semibold text-gray-700">원금</th>
-                  <th className="text-right py-2 px-3 font-semibold text-gray-700">투자금</th>
-                  <th className="text-right py-2 px-3 font-semibold text-gray-700">월 수익률</th>
-                  <th className="text-right py-2 px-3 font-semibold text-gray-700">누적 수익률</th>
-                  <th className="text-left py-2 px-3 font-semibold text-gray-700">메모</th>
+                  <th className="text-right py-2 px-3 font-semibold text-gray-700">입출금</th>
+                   <th className="text-right py-2 px-3 font-semibold text-gray-700">월 수익률</th>
+                   <th className="text-right py-2 px-3 font-semibold text-gray-700">월 평균 수익률</th>
+                   <th className="text-center py-2 px-3 font-semibold text-gray-700">평균 제외</th>
+                   <th className="text-right py-2 px-3 font-semibold text-gray-700">누적 수익률</th>
+                   <th className="text-left py-2 px-3 font-semibold text-gray-700">메모</th>
                   <th className="py-2 px-3"></th>
                 </tr>
               </thead>
@@ -565,15 +1296,30 @@ const AssetTrackingView = () => {
                     <td className="py-2 px-3 text-right text-gray-500">
                       {record.contribution ? `${record.contribution.toLocaleString()}만` : '-'}
                     </td>
-                    <td className={`py-2 px-3 text-right font-medium ${
-                      record.monthlyReturn === null ? 'text-gray-400' :
-                      record.monthlyReturn >= 0 ? 'text-emerald-600' : 'text-red-600'
-                    }`}>
-                      {formatPercent(record.monthlyReturn)}
-                    </td>
-                    <td className={`py-2 px-3 text-right ${
-                      record.cumulativeReturn >= 0 ? 'text-blue-600' : 'text-red-600'
-                    }`}>
+                     <td className={`py-2 px-3 text-right font-medium ${
+                       record.monthlyReturn === null ? 'text-gray-400' :
+                       record.monthlyReturn >= 0 ? 'text-emerald-600' : 'text-red-600'
+                     }`}>
+                       {formatPercent(record.monthlyReturn)}
+                     </td>
+                      <td className={`py-2 px-3 text-right font-medium ${
+                        record.monthlyAverageReturn === null ? 'text-gray-400' :
+                        record.monthlyAverageReturn >= 0 ? 'text-amber-600' : 'text-red-600'
+                      }`}>
+                        {formatPercent(record.monthlyAverageReturn)}
+                      </td>
+                      <td className="py-2 px-3 text-center">
+                        {record.excludeFromMonthlyAverage ? (
+                          <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                            제외
+                          </span>
+                        ) : (
+                          <span className="text-gray-300">-</span>
+                        )}
+                      </td>
+                      <td className={`py-2 px-3 text-right ${
+                        record.cumulativeReturn >= 0 ? 'text-blue-600' : 'text-red-600'
+                      }`}>
                       {formatPercent(record.cumulativeReturn)}
                     </td>
                     <td className="py-2 px-3 text-gray-500 max-w-[120px] truncate">

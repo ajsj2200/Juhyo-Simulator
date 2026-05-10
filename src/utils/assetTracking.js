@@ -29,12 +29,13 @@ export const calculateMonthlyReturns = (records) => {
     const prevValue = prevRecord.assetValue || 0;
     const currValue = record.assetValue || 0;
     const currPrincipal = record.principal || 0;
-    const prevPrincipal = prevRecord.principal || 0;
-    
-    // 투자금 = 원금 증가분 (자동 계산)
-    const contribution = currPrincipal > 0 && prevPrincipal > 0 
-      ? currPrincipal - prevPrincipal 
-      : record.contribution || 0;
+
+    // 입출금 = 사용자가 직접 입력한 순현금흐름
+    // legacy 레코드는 explicitContribution=false/undefined 일 수 있으므로
+    // 기존 데이터가 완전히 깨지지 않도록 명시 입력 전에는 원금 증가분을 fallback 으로 사용
+    const contribution = record.explicitContribution
+      ? (record.contribution || 0)
+      : (record.contribution || ((record.principal || 0) - (prevRecord.principal || 0)) || 0);
     
     // 월 수익률 = (현재총자산 - 이전총자산 - 투자금) / 이전총자산
     let monthlyReturn = null;
@@ -48,12 +49,12 @@ export const calculateMonthlyReturns = (records) => {
       cumulativeReturn = ((currValue - currPrincipal) / currPrincipal) * 100;
     }
     
-    return {
-      ...record,
-      contribution, // 자동 계산된 투자금 (원금 증가분)
-      monthlyReturn,
-      cumulativeReturn,
-    };
+      return {
+        ...record,
+        contribution,
+        monthlyReturn,
+        cumulativeReturn,
+      };
   });
 };
 
@@ -123,12 +124,52 @@ export const calculateVolatility = (records) => {
 export const calculateAverageMonthlyReturn = (records) => {
   const withReturns = calculateMonthlyReturns(records);
   const returns = withReturns
-    .filter(r => r.monthlyReturn !== null)
+    .filter(r => r.monthlyReturn !== null && !r.excludeFromMonthlyAverage)
     .map(r => r.monthlyReturn);
   
   if (returns.length === 0) return 0;
   
   return returns.reduce((sum, r) => sum + r, 0) / returns.length;
+};
+
+/**
+ * 같은 달에 여러 번 입력된 기록의 월 평균 수익률 계산
+ * @param {Array} records - 자산 기록 배열
+ * @returns {Array} - 월 평균 수익률이 추가된 기록 배열
+ */
+export const calculateMonthlyAverageReturnsByMonth = (records) => {
+  const withReturns = calculateMonthlyReturns(records);
+
+  if (withReturns.length === 0) return [];
+
+  const monthlyGroups = withReturns.reduce((acc, record) => {
+    const monthKey = record.date.slice(0, 7);
+
+    if (!acc[monthKey]) {
+      acc[monthKey] = [];
+    }
+
+    if (record.monthlyReturn !== null && !record.excludeFromMonthlyAverage) {
+      acc[monthKey].push(record.monthlyReturn);
+    }
+
+    return acc;
+  }, {});
+
+  const monthlyAverages = Object.fromEntries(
+    Object.entries(monthlyGroups).map(([monthKey, returns]) => [
+      monthKey,
+      returns.length > 0
+        ? returns.reduce((sum, value) => sum + value, 0) / returns.length
+        : null,
+    ])
+  );
+
+  return withReturns.map((record) => ({
+    ...record,
+    monthKey: record.date.slice(0, 7),
+    monthlyAverageReturn: monthlyAverages[record.date.slice(0, 7)] ?? null,
+  }));
 };
 
 /**
@@ -234,12 +275,14 @@ export const projectFutureWealth = (records, futureMonths = 12, monthlyContribut
 export const exportToCSV = (records) => {
   if (!records || records.length === 0) return '';
   
-  const headers = ['date', 'assetValue', 'principal', 'contribution', 'memo'];
+  const headers = ['date', 'assetValue', 'principal', 'contribution', 'explicitContribution', 'excludeFromMonthlyAverage', 'memo'];
   const rows = records.map(r => [
     r.date,
     r.assetValue || 0,
     r.principal || 0,
     r.contribution || 0,
+    r.explicitContribution ? 'true' : 'false',
+    r.excludeFromMonthlyAverage ? 'true' : 'false',
     (r.memo || '').replace(/,/g, ';').replace(/\n/g, ' '),
   ]);
   
@@ -287,6 +330,8 @@ export const importFromCSV = (csvContent) => {
   const valueIdx = headers.indexOf('assetvalue');
   const principalIdx = headers.indexOf('principal');
   const contribIdx = headers.indexOf('contribution');
+  const explicitContributionIdx = headers.indexOf('explicitcontribution');
+  const excludeIdx = headers.indexOf('excludefrommonthlyaverage');
   const memoIdx = headers.indexOf('memo');
   
   if (dateIdx === -1 || valueIdx === -1) {
@@ -302,6 +347,12 @@ export const importFromCSV = (csvContent) => {
     const assetValue = parseFloat(values[valueIdx]) || 0;
     const principal = principalIdx >= 0 ? (parseFloat(values[principalIdx]) || 0) : 0;
     const contribution = contribIdx >= 0 ? (parseFloat(values[contribIdx]) || 0) : 0;
+    const explicitContribution = explicitContributionIdx >= 0
+      ? values[explicitContributionIdx]?.trim().toLowerCase() === 'true'
+      : false;
+    const excludeFromMonthlyAverage = excludeIdx >= 0
+      ? values[excludeIdx]?.trim().toLowerCase() === 'true'
+      : false;
     const memo = memoIdx >= 0 ? values[memoIdx]?.trim() || '' : '';
     
     if (date && (/^\d{4}-\d{2}$/.test(date) || /^\d{4}-\d{2}-\d{2}$/.test(date))) {
@@ -311,6 +362,8 @@ export const importFromCSV = (csvContent) => {
         assetValue,
         principal,
         contribution,
+        explicitContribution,
+        excludeFromMonthlyAverage,
         memo,
       });
     }
@@ -346,11 +399,13 @@ export const readCSVFile = (file) => {
  * @param {string} date - 날짜 (YYYY-MM-DD)
  * @param {number} assetValue - 자산 금액 (총 자산)
  * @param {number} principal - 원금 (누적 투자금)
- * @param {number} contribution - 이번 투자금
+ * @param {number} contribution - 이번 순입출금
  * @param {string} memo - 메모
+ * @param {boolean} explicitContribution - 입출금 직접 입력 여부
+ * @param {boolean} excludeFromMonthlyAverage - 월 평균 수익률 집계 제외 여부
  * @returns {Object} - 새 기록 객체
  */
-export const createRecord = (date, assetValue, principal = 0, contribution = 0, memo = '') => {
+export const createRecord = (date, assetValue, principal = 0, contribution = 0, memo = '', explicitContribution = false, excludeFromMonthlyAverage = false) => {
   return {
     id: `record-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
     date,
@@ -358,6 +413,8 @@ export const createRecord = (date, assetValue, principal = 0, contribution = 0, 
     principal: Number(principal) || 0,
     contribution: Number(contribution) || 0,
     memo: memo || '',
+    explicitContribution,
+    excludeFromMonthlyAverage,
   };
 };
 

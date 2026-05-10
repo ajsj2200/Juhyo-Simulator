@@ -41,6 +41,69 @@ import { linearRegression } from '../utils/assetTracking';
 import { getInitialTheme, getNextTheme, THEME_STORAGE_KEY } from '../utils/theme';
 
 const LOCAL_PRESET_KEY = 'vooAppCustomPresetsV1';
+const ASSET_RECORDS_STORAGE_KEY = 'voo-app-asset-records';
+const TRACKED_STOCK_PORTFOLIO_STORAGE_KEY = 'voo-app-tracked-stock-portfolio';
+
+const DEFAULT_TRACKED_STOCK_PORTFOLIO = {
+  usdKrwRate: 1380,
+  positions: [],
+};
+
+const toFiniteNumber = (value, fallback = 0) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+};
+
+const normalizePortfolioCustomStocks = (value) => (
+  Array.isArray(value)
+    ? value
+        .map((stock) => {
+          if (!stock || typeof stock !== 'object') return null;
+
+          const ticker = typeof stock.ticker === 'string' ? stock.ticker.trim().toUpperCase() : '';
+          if (!ticker) return null;
+
+          return {
+            ...stock,
+            ticker,
+            name: stock.name || ticker,
+            allocation: Math.max(0, Math.min(100, toFiniteNumber(stock.allocation, 0))),
+            monthlyAmount: Math.max(0, toFiniteNumber(stock.monthlyAmount, 0)),
+            initialAmount: Math.max(0, toFiniteNumber(stock.initialAmount, 0)),
+            expectedReturn: toFiniteNumber(stock.expectedReturn, 0),
+            stdDev: Math.max(0, toFiniteNumber(stock.stdDev, 0)),
+            color: typeof stock.color === 'string' && stock.color.trim() ? stock.color : '#8b5cf6',
+          };
+        })
+        .filter(Boolean)
+    : []
+);
+
+const normalizeTrackedStockPortfolio = (value) => {
+  if (!value || typeof value !== 'object') {
+    return DEFAULT_TRACKED_STOCK_PORTFOLIO;
+  }
+
+  return {
+    usdKrwRate: Number(value.usdKrwRate) > 0 ? Number(value.usdKrwRate) : DEFAULT_TRACKED_STOCK_PORTFOLIO.usdKrwRate,
+    positions: Array.isArray(value.positions)
+      ? value.positions
+          .filter((position) => position && typeof position === 'object' && position.ticker)
+          .map((position) => ({
+            id: position.id || `tracked-stock-${position.ticker}-${Math.random().toString(36).slice(2, 8)}`,
+            ticker: String(position.ticker || '').trim().toUpperCase(),
+            name: position.name || String(position.ticker || '').trim().toUpperCase(),
+            shares: Number(position.shares) || 0,
+            averageBuyPrice: Number(position.averageBuyPrice) || 0,
+            manualCurrentPrice: Number(position.manualCurrentPrice) > 0 ? Number(position.manualCurrentPrice) : null,
+            currency: position.currency || 'USD',
+            exchange: position.exchange || '',
+            color: position.color || '#38bdf8',
+          }))
+          .filter((position) => position.ticker && position.shares > 0)
+      : [],
+  };
+};
 
 const loadLocalPresets = () => {
   if (typeof window === 'undefined') return [];
@@ -61,6 +124,64 @@ const persistLocalPresets = (presets) => {
   } catch {
     // ignore
   }
+};
+
+const normalizeImportedPreset = (preset, index) => {
+  if (!preset || typeof preset !== 'object') return null;
+  const data = preset.data && typeof preset.data === 'object' ? preset.data : null;
+  if (!data) return null;
+
+  const name = typeof preset.name === 'string' && preset.name.trim()
+    ? preset.name.trim()
+    : `가져온 프리셋 ${index + 1}`;
+
+  return {
+    ...preset,
+    id: preset.id ?? Date.now() + index,
+    name,
+    savedAt: typeof preset.savedAt === 'string' ? preset.savedAt : new Date().toISOString(),
+    data,
+  };
+};
+
+const parseImportedPresets = (text) => {
+  const parsed = JSON.parse(text);
+  const presets = Array.isArray(parsed)
+    ? parsed
+    : Array.isArray(parsed?.presets)
+      ? parsed.presets
+      : null;
+
+  if (!presets) {
+    throw new Error('프리셋 JSON 형식이 아닙니다.');
+  }
+
+  const normalized = presets
+    .map((preset, index) => normalizeImportedPreset(preset, index))
+    .filter(Boolean);
+
+  if (normalized.length === 0) {
+    throw new Error('가져올 프리셋이 없습니다.');
+  }
+
+  return normalized;
+};
+
+const mergePresetCollections = (currentPresets, importedPresets, mode = 'merge') => {
+  if (mode === 'replace') return importedPresets;
+
+  const merged = [...importedPresets, ...currentPresets];
+  const unique = [];
+  const seen = new Set();
+
+  merged.forEach((preset) => {
+    const key = `${preset.id}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    unique.push(preset);
+  });
+
+  return unique;
 };
 
 const getBrowserStorage = () => {
@@ -133,6 +254,7 @@ export const SimulatorProvider = ({ children }) => {
   // Asset Tracking (자산 추적)
   const [assetRecords, setAssetRecords] = useState([]);
   const [showActualAssets, setShowActualAssets] = useState(true);
+  const [trackedStockPortfolio, setTrackedStockPortfolio] = useState(DEFAULT_TRACKED_STOCK_PORTFOLIO);
 
   // Loan Calculator
   const [loanCalc, setLoanCalc] = useState({
@@ -155,7 +277,7 @@ export const SimulatorProvider = ({ children }) => {
   // Load asset records from localStorage
   useEffect(() => {
     try {
-      const saved = localStorage.getItem('voo-app-asset-records');
+      const saved = localStorage.getItem(ASSET_RECORDS_STORAGE_KEY);
       if (saved) {
         setAssetRecords(JSON.parse(saved));
       }
@@ -167,11 +289,33 @@ export const SimulatorProvider = ({ children }) => {
   // Save asset records to localStorage
   useEffect(() => {
     try {
-      localStorage.setItem('voo-app-asset-records', JSON.stringify(assetRecords));
+      localStorage.setItem(ASSET_RECORDS_STORAGE_KEY, JSON.stringify(assetRecords));
     } catch (e) {
       console.error('Failed to save asset records:', e);
     }
   }, [assetRecords]);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(TRACKED_STOCK_PORTFOLIO_STORAGE_KEY);
+      if (saved) {
+        setTrackedStockPortfolio(normalizeTrackedStockPortfolio(JSON.parse(saved)));
+      }
+    } catch (e) {
+      console.error('Failed to load tracked stock portfolio:', e);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        TRACKED_STOCK_PORTFOLIO_STORAGE_KEY,
+        JSON.stringify(normalizeTrackedStockPortfolio(trackedStockPortfolio))
+      );
+    } catch (e) {
+      console.error('Failed to save tracked stock portfolio:', e);
+    }
+  }, [trackedStockPortfolio]);
 
   // Load presets from localStorage
   useEffect(() => {
@@ -275,7 +419,7 @@ export const SimulatorProvider = ({ children }) => {
   const portfolioRate = useMemo(() => {
     if (!portfolio.enabled) return you.rate;
     
-    const customStocks = portfolio.customStocks || [];
+    const customStocks = normalizePortfolioCustomStocks(portfolio.customStocks);
     const useAmountMode = portfolio.useAmountMode || false;
     const monthlyAmounts = portfolio.monthlyAmounts || { voo: 0, schd: 0, bond: 0, cash: 0 };
     const reinvestDividends = portfolio.reinvestDividends ?? true;
@@ -334,7 +478,7 @@ export const SimulatorProvider = ({ children }) => {
     const baseStdDev = getPortfolioStdDev(portfolio.allocations);
     const baseTotal = Object.values(portfolio.allocations).reduce((a, b) => a + b, 0);
     
-    const customStocks = portfolio.customStocks || [];
+    const customStocks = normalizePortfolioCustomStocks(portfolio.customStocks);
     const customTotal = customStocks.reduce((sum, s) => sum + s.allocation, 0);
     
     // 기본 자산 분산 기여분
@@ -1381,7 +1525,7 @@ ${chartDataWithMonteCarlo.map((data, idx) => {
           ...DEFAULT_PORTFOLIO.monthlyAmounts,
           ...(cloned.portfolio.monthlyAmounts || {}),
         },
-        customStocks: cloned.portfolio.customStocks || [],
+        customStocks: normalizePortfolioCustomStocks(cloned.portfolio.customStocks),
       });
     }
     // 대출 계산기 로드
@@ -1452,6 +1596,44 @@ ${chartDataWithMonteCarlo.map((data, idx) => {
     useHistoricalReturns,
     historicalStartYear,
   ]);
+
+  const handleExportPresets = useCallback(() => {
+    if (typeof window === 'undefined' || savedPresets.length === 0) return;
+
+    const payload = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      presets: savedPresets,
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: 'application/json;charset=utf-8',
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `voo-presets-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }, [savedPresets]);
+
+  const handleImportPresets = useCallback(
+    (text, mode = 'merge') => {
+      const importedPresets = parseImportedPresets(text);
+      const next = mergePresetCollections(savedPresets, importedPresets, mode);
+      setSavedPresets(next);
+      persistLocalPresets(next);
+      setPreviewPreset(importedPresets[0] || null);
+      setActivePresetId(null);
+      return {
+        importedCount: importedPresets.length,
+        totalCount: next.length,
+      };
+    },
+    [savedPresets]
+  );
 
   const presetDiff = useMemo(() => {
     if (!activePresetId) return [];
@@ -1544,8 +1726,8 @@ ${chartDataWithMonteCarlo.map((data, idx) => {
     });
 
     // 커스텀 주식
-    const origCustoms = orig.portfolio?.customStocks || [];
-    const currCustoms = portfolio.customStocks || [];
+    const origCustoms = normalizePortfolioCustomStocks(orig.portfolio?.customStocks);
+    const currCustoms = normalizePortfolioCustomStocks(portfolio.customStocks);
     
     // 추가되거나 변경된 종목
     currCustoms.forEach(curr => {
@@ -1674,6 +1856,8 @@ ${chartDataWithMonteCarlo.map((data, idx) => {
     handleConfirmLoadPreset,
     applyPreset,
     handleUpdatePreset,
+    handleExportPresets,
+    handleImportPresets,
     activePresetId,
     setActivePresetId,
     presetDiff,
@@ -1707,6 +1891,8 @@ ${chartDataWithMonteCarlo.map((data, idx) => {
     setAssetRecords,
     showActualAssets,
     setShowActualAssets,
+    trackedStockPortfolio,
+    setTrackedStockPortfolio,
 
     // Constants for reference
     SP500_STATS,

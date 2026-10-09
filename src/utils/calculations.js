@@ -433,14 +433,14 @@ export const calculateWealthWithMarriage = (
   let spouseWealth = 0;
   let principalYou = youWealth;
   let principalSpouse = 0;
-  const youRateMonthly = getEffectiveAnnualRate(person) / 100 / 12;
+  const youRateMonthly = annualPctToMonthlyRate(getEffectiveAnnualRate(person));
   const spouseAnnualRate =
     marriage.spouse.rate ?? (Number(person.rate) || 0);
-  const spouseRateMonthly = (
+  const spouseRateMonthly = annualPctToMonthlyRate(
     marriage.spouse.reinvestDividends === false
       ? spouseAnnualRate - (Number(marriage.spouse.dividendYield) || 0)
       : spouseAnnualRate
-  ) / 100 / 12;
+  );
   const crisisActive = (currentYear) =>
     crisis?.enabled &&
     currentYear >= crisis.startYear &&
@@ -448,6 +448,7 @@ export const calculateWealthWithMarriage = (
   const prepayMonths = Math.floor((marriage.prepayYear || marriage.loanYears) * 12);
   let loanPaidOff = false;
   let spouseInitialMerged = false;
+  let spousePreWealth = marriage.spouse?.initial || 0;
   // 집 구매 시점 (기본값: 결혼 시점)
   const yearOfHousePurchase = marriage.yearOfHousePurchase ?? marriage.yearOfMarriage;
   let houseValue = marriage.buyHouse ? marriage.housePrice : 0;
@@ -479,10 +480,13 @@ export const calculateWealthWithMarriage = (
       const spouseActive = marriage.enabled && currentYear >= marriage.yearOfMarriage;
 
       if (spouseActive && !spouseInitialMerged) {
-        const initialAdd = marriage.spouse.initial || 0;
+        const initialAdd = spousePreWealth;
         spouseWealth += initialAdd;
         principalSpouse += initialAdd;
         spouseInitialMerged = true;
+      }
+      if (marriage.enabled && !spouseActive) {
+        spousePreWealth = spousePreWealth * (1 + spouseRateMonthly) + (currentYear < marriage.spouse.retireYear ? spouseMonthly : 0);
       }
 
       // 집 구매 시점에 자기자본(다운페이)을 현금에서 차감
@@ -603,12 +607,9 @@ export const calculateWealthWithMarriage = (
           }
         }
       } else if (personRetired && (!marriage.enabled || spouseRetired || currentYear < marriage.yearOfMarriage)) {
-        const effectiveRetireYear = marriage.enabled
-          ? Math.max(person.retireYear, marriage.spouse.retireYear)
-          : person.retireYear;
-        const yearsAfterRetirement = currentYear - effectiveRetireYear;
+        // 은퇴 생활비는 '현재 가치' 입력이므로 시뮬레이션 시작 시점부터 물가를 반영
         const adjustedExpense = retirement.monthlyExpense *
-          Math.pow(1 + retirement.inflationRate / 100, Math.max(0, yearsAfterRetirement));
+          Math.pow(1 + retirement.inflationRate / 100, Math.max(0, currentYear));
         const crisisMonthlyRate = crisisActive(currentYear) ? crisis.drawdownRate / 100 / 12 : 0;
 
         if (retirement.useJEPQ) {
@@ -639,7 +640,7 @@ export const calculateWealthWithMarriage = (
             principalSpouse = Math.max(0, principalSpouse - adjustedExpense * (1 - youRatio) + interest * (1 - youRatio));
           }
         } else {
-          const baseVooGrowth = retirement.vooGrowthRate / 100 / 12;
+          const baseVooGrowth = annualPctToMonthlyRate(retirement.vooGrowthRate);
           if (useCompound) {
             youWealth = youWealth * (1 + baseVooGrowth + crisisMonthlyRate);
             spouseWealth = spouseWealth * (1 + baseVooGrowth + crisisMonthlyRate);
@@ -655,10 +656,16 @@ export const calculateWealthWithMarriage = (
           }
         }
 
+        let adjustedExpenseLoan = 0;
+        if (housePurchaseActive && !loanPaidOff) {
+          const msRet = Math.floor((currentYear - yearOfHousePurchase) * 12);
+          const liRet = getLoanPaymentAtMonth(marriage.loanAmount, marriage.loanRate, marriage.loanYears, marriage.repaymentType, msRet);
+          if (liRet.isComplete) { loanPaidOff = true; } else { adjustedExpenseLoan = liRet.payment; }
+        }
         const totalAfterGrowth = youWealth + spouseWealth;
         const youRatio = totalAfterGrowth > 0 ? youWealth / totalAfterGrowth : 0.5;
-        const youExpense = adjustedExpense * youRatio;
-        const spouseExpense = adjustedExpense * (1 - youRatio);
+        const youExpense = (adjustedExpense + adjustedExpenseLoan) * youRatio;
+        const spouseExpense = (adjustedExpense + adjustedExpenseLoan) * (1 - youRatio);
         youWealth = youWealth - youExpense;
         spouseWealth = spouseWealth - spouseExpense;
         if (!useCompound) {
@@ -670,7 +677,7 @@ export const calculateWealthWithMarriage = (
   }
 
   let finalWealth = youWealth + spouseWealth;
-  if (marriage.buyHouse && targetYear >= yearOfHousePurchase) {
+  if (marriage.buyHouse && downPaymentDeducted) {
     finalWealth += houseValue;
     if (!loanPaidOff) {
       const yearsSinceLoan = targetYear - yearOfHousePurchase;
@@ -731,9 +738,8 @@ export const calculateWealth = (initial, monthly, annualRate, years, monthlyGrow
         }
       } else {
         // 은퇴 후: 자산 성장 후 생활비 인출
-        const yearsAfterRetirement = currentYear - person.retireYear;
         const adjustedExpense = retirement.monthlyExpense *
-          Math.pow(1 + retirement.inflationRate / 100, Math.max(0, yearsAfterRetirement));
+          Math.pow(1 + retirement.inflationRate / 100, Math.max(0, currentYear));
         const crisisMonthlyRate = crisisActive(currentYear) ? crisis.drawdownRate / 100 / 12 : 0;
 
         if (retirement.useJEPQ) {
@@ -759,7 +765,7 @@ export const calculateWealth = (initial, monthly, annualRate, years, monthlyGrow
           }
         } else {
           // VOO만: 성장
-          const baseVooGrowth = retirement.vooGrowthRate / 100 / 12;
+          const baseVooGrowth = annualPctToMonthlyRate(retirement.vooGrowthRate);
           const crisisMonthlyRate = crisisActive(currentYear) ? crisis.drawdownRate / 100 / 12 : 0;
           if (useCompound) {
             wealth = wealth * (1 + baseVooGrowth + crisisMonthlyRate);
@@ -885,9 +891,8 @@ export const calculateWealthWithHistoricalReturns = (
         }
       } else {
         // 은퇴 후: 생활비 인출
-        const yearsAfterRetirement = currentYear - person.retireYear;
         const adjustedExpense = retirement.monthlyExpense *
-          Math.pow(1 + retirement.inflationRate / 100, Math.max(0, yearsAfterRetirement));
+          Math.pow(1 + retirement.inflationRate / 100, Math.max(0, currentYear));
 
         if (useCompound) {
           wealth = wealth * (1 + monthlyRate);
@@ -927,6 +932,7 @@ export const calculateWealthWithMarriageHistorical = (
   let principalYou = youWealth;
   let principalSpouse = 0;
   let spouseInitialMerged = false;
+  let spousePreWealth = marriage.spouse?.initial || 0;
   const yearOfHousePurchase = marriage.yearOfHousePurchase ?? marriage.yearOfMarriage;
   let houseValue = marriage.buyHouse ? marriage.housePrice : 0;
   const houseAppreciationMonthlyRate = marriage.buyHouse
@@ -948,7 +954,7 @@ export const calculateWealthWithMarriageHistorical = (
   for (let year = 0; year <= targetYear; year++) {
     // year년 시점의 집값 포함 순자산 계산
     let wealthWithHouse = youWealth + spouseWealth;
-    if (marriage.buyHouse && year >= yearOfHousePurchase) {
+    if (marriage.buyHouse && downPaymentDeducted) {
       // 현재 시점까지의 집값 상승 계산
       const monthsSinceHousePurchase = Math.max(0, Math.floor((year - yearOfHousePurchase) * 12));
       const currentHouseVal = marriage.housePrice * Math.pow(1 + houseAppreciationMonthlyRate, monthsSinceHousePurchase);
@@ -1006,10 +1012,13 @@ export const calculateWealthWithMarriageHistorical = (
       const housePurchaseActive = marriage.buyHouse && currentYear >= yearOfHousePurchase;
 
       if (spouseActive && !spouseInitialMerged) {
-        const initialAdd = marriage.spouse.initial || 0;
+        const initialAdd = spousePreWealth;
         spouseWealth += initialAdd;
         principalSpouse += initialAdd;
         spouseInitialMerged = true;
+      }
+      if (marriage.enabled && !spouseActive) {
+        spousePreWealth = spousePreWealth * (1 + spouseRateMonthly) + (currentYear < marriage.spouse.retireYear ? spouseMonthly : 0);
       }
 
       // 집 구매 시점에 다운페이 차감
@@ -1110,29 +1119,32 @@ export const calculateWealthWithMarriageHistorical = (
           }
         }
       } else if (personRetired && (!marriage.enabled || spouseRetired || currentYear < marriage.yearOfMarriage)) {
-        const effectiveRetireYear = marriage.enabled
-          ? Math.max(person.retireYear, marriage.spouse.retireYear)
-          : person.retireYear;
-        const yearsAfterRetirement = currentYear - effectiveRetireYear;
+        // 은퇴 생활비는 '현재 가치' 입력이므로 시뮬레이션 시작 시점부터 물가를 반영
         const adjustedExpense = retirement.monthlyExpense *
-          Math.pow(1 + retirement.inflationRate / 100, Math.max(0, yearsAfterRetirement));
+          Math.pow(1 + retirement.inflationRate / 100, Math.max(0, currentYear));
 
         if (useCompound) {
           youWealth = youWealth * (1 + youRateMonthly);
           spouseWealth = spouseWealth * (1 + spouseRateMonthly);
         }
 
+        let adjustedExpenseLoan = 0;
+        if (housePurchaseActive && !loanPaidOff) {
+          const msRet = Math.floor((currentYear - yearOfHousePurchase) * 12);
+          const liRet = getLoanPaymentAtMonth(marriage.loanAmount, marriage.loanRate, marriage.loanYears, marriage.repaymentType, msRet);
+          if (liRet.isComplete) { loanPaidOff = true; } else { adjustedExpenseLoan = liRet.payment; }
+        }
         const totalAfterGrowth = youWealth + spouseWealth;
         const youRatio = totalAfterGrowth > 0 ? youWealth / totalAfterGrowth : 0.5;
-        youWealth = youWealth - adjustedExpense * youRatio;
-        spouseWealth = spouseWealth - adjustedExpense * (1 - youRatio);
+        youWealth = youWealth - (adjustedExpense + adjustedExpenseLoan) * youRatio;
+        spouseWealth = spouseWealth - (adjustedExpense + adjustedExpenseLoan) * (1 - youRatio);
       }
     }
     // yearlyData는 루프 시작 시 이미 push됨
   }
 
   let finalWealth = youWealth + spouseWealth;
-  if (marriage.buyHouse && targetYear >= yearOfHousePurchase) {
+  if (marriage.buyHouse && downPaymentDeducted) {
     finalWealth += houseValue;
     if (!loanPaidOff) {
       const yearsSinceLoan = targetYear - yearOfHousePurchase;
@@ -1251,9 +1263,8 @@ export const calculateWealthWithPortfolio = (
         }
       } else {
         // 은퇴 후: 생활비 인출 (각 자산에서 비례 인출)
-        const yearsAfterRetirement = currentYear - person.retireYear;
         const adjustedExpense = retirement.monthlyExpense *
-          Math.pow(1 + retirement.inflationRate / 100, Math.max(0, yearsAfterRetirement));
+          Math.pow(1 + retirement.inflationRate / 100, Math.max(0, currentYear));
 
         // 자산 성장
         if (useCompound) {

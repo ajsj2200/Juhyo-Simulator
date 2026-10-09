@@ -196,7 +196,7 @@ const WealthChart = ({
   onToggleActualAssets,
   hasActualAssetData = false,
 }) => {
-  const { theme } = useSimulator();
+  const { resolvedTheme: theme } = useSimulator();
   const isDark = theme === 'dark';
   // 줌 상태 관리
   // left/right는 데이터의 key(여기서는 index)
@@ -234,9 +234,9 @@ const WealthChart = ({
     setRefAreaRight('');
   }, []);
 
-  const gridStroke = theme === 'dark' ? '#334155' : '#f1f5f9';
-  const axisStroke = theme === 'dark' ? '#475569' : '#e5e7eb';
-  const tickColor = theme === 'dark' ? '#cbd5e1' : '#6b7280';
+  const gridStroke = theme === 'dark' ? '#3a3733' : '#f0ede6';
+  const axisStroke = theme === 'dark' ? '#4a463f' : '#e6dfd8';
+  const tickColor = theme === 'dark' ? '#c9c5bd' : '#6c6a64';
 
   const effectiveRetireYear =
     marriagePlan.enabled && retirementPlan.enabled
@@ -371,15 +371,6 @@ const WealthChart = ({
           ? Math.min(marriagePlan.prepayYear, marriagePlan.loanYears)
           : marriagePlan.loanYears)
       : null;
-  const xMax = Math.max(
-    lastYear,
-    crisisEnd ?? 0,
-    loanCompletionYear ?? 0,
-    marriagePlan.enabled ? marriagePlan.yearOfMarriage : 0,
-    effectiveRetireYear ?? 0,
-    spouseRetireYear ?? 0
-  );
-
   return (
     <div className="mb-8">
       <div className="flex items-center justify-between mb-3">
@@ -460,12 +451,12 @@ const WealthChart = ({
         >
           <defs>
             <linearGradient id="youGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.28} />
-              <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.02} />
+              <stop offset="5%" stopColor="#cc785c" stopOpacity={isDark ? 0.16 : 0.28} />
+              <stop offset="95%" stopColor="#cc785c" stopOpacity={0.02} />
             </linearGradient>
             <linearGradient id="youNoMarriageGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#60a5fa" stopOpacity={0.22} />
-              <stop offset="95%" stopColor="#60a5fa" stopOpacity={0.01} />
+              <stop offset="5%" stopColor="#d69275" stopOpacity={0.22} />
+              <stop offset="95%" stopColor="#d69275" stopOpacity={0.01} />
             </linearGradient>
             <linearGradient id="otherGradient" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor="#ef4444" stopOpacity={0.24} />
@@ -531,7 +522,7 @@ const WealthChart = ({
               x1={refAreaLeft}
               x2={refAreaRight}
               strokeOpacity={0.3}
-              fill="#3b82f6"
+              fill="#cc785c"
               fillOpacity={0.15}
             />
           ) : null}
@@ -549,7 +540,7 @@ const WealthChart = ({
                 label={{
                   value: '은퇴 이후',
                   position: 'insideTopLeft',
-                  fill: '#6b7280',
+                  fill: '#6c6a64',
                   fontSize: 12,
                   offset: 8,
                 }}
@@ -582,10 +573,10 @@ const WealthChart = ({
           {retirementPlan.enabled && (
             <ReferenceLine
               x={personRetireYear}
-              stroke="#3b82f6"
+              stroke="#cc785c"
               strokeWidth={2}
               strokeDasharray="3 3"
-              label={{ value: '🧑 본인 은퇴', position: 'insideTopRight', fill: '#3b82f6', fontSize: 10 }}
+              label={{ value: '🧑 본인 은퇴', position: 'insideTopRight', fill: '#cc785c', fontSize: 10 }}
             />
           )}
 
@@ -601,7 +592,7 @@ const WealthChart = ({
           )}
 
           {/* JEPQ 배당금으로 생활비 충당 가능 시점 */}
-          {jepqFinancialIndependenceYear !== null && (
+          {jepqFinancialIndependenceYear != null && (
             <ReferenceLine
               x={jepqFinancialIndependenceYear}
               stroke="#f59e0b"
@@ -745,7 +736,7 @@ const WealthChart = ({
           <Area
             type="monotone"
             dataKey="you"
-            stroke="#3b82f6"
+            stroke="#cc785c"
             fill="url(#youGradient)"
             strokeWidth={3}
             name={marriagePlan.enabled ? `${you.name} (결혼 O)` : you.name}
@@ -756,7 +747,7 @@ const WealthChart = ({
             <Area
               type="monotone"
               dataKey="youNoMarriage"
-              stroke="#60a5fa"
+              stroke="#d69275"
               fill="url(#youNoMarriageGradient)"
               strokeWidth={2}
               strokeDasharray="4 3"
@@ -870,7 +861,7 @@ const WealthChart = ({
         {marriagePlan.enabled && retirementPlan.enabled && (
           <div className="text-purple-600">👫 {spouseRetireYear}년 후 배우자 은퇴</div>
         )}
-        {jepqFinancialIndependenceYear !== null && (
+        {jepqFinancialIndependenceYear != null && (
           <div className="text-amber-600">
             💰 {jepqFinancialIndependenceYear}년 후 JEPQ 배당금으로 생활비 충당 가능
           </div>

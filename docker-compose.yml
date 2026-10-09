@@ -1,0 +1,10 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_FINANCE_PROXY_URL: ${VITE_FINANCE_PROXY_URL:-}
+    ports:
+      - "${VOO_APP_PORT:-8081}:80"
+    restart: unless-stopped

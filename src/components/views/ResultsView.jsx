@@ -27,6 +27,7 @@ const ResultsView = () => {
     showMCBands,
     setShowMCBands,
     loanCompletionYear,
+    jepqFinancialIndependenceYear,
     houseValueFinal,
     remainingLoanFinal,
     netHouseEquity,
@@ -47,19 +48,19 @@ const ResultsView = () => {
     setShowActualAssets,
     copyResults,
     copied,
-    theme,
+    resolvedTheme: theme,
   } = useSimulator();
   const [mcYear, setMcYear] = useState(years);
   const [portfolioMcYear, setPortfolioMcYear] = useState(years);
 
   const isDark = theme === 'dark';
   const chartColors = {
-    grid: theme === 'dark' ? '#334155' : '#e5e7eb',
-    axis: theme === 'dark' ? '#475569' : '#e5e7eb',
-    tick: theme === 'dark' ? '#cbd5e1' : '#6b7280',
-    tooltipBg: theme === 'dark' ? 'rgba(15, 23, 42, 0.95)' : 'rgba(255, 255, 255, 0.95)',
-    tooltipBorder: theme === 'dark' ? '#334155' : '#e5e7eb',
-    tooltipText: theme === 'dark' ? '#e2e8f0' : '#374151',
+    grid: theme === 'dark' ? '#3a3733' : '#e6dfd8',
+    axis: theme === 'dark' ? '#4a463f' : '#e6dfd8',
+    tick: theme === 'dark' ? '#c9c5bd' : '#6c6a64',
+    tooltipBg: theme === 'dark' ? 'rgba(24, 23, 21, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+    tooltipBorder: theme === 'dark' ? '#3a3733' : '#e6dfd8',
+    tooltipText: theme === 'dark' ? '#dedad2' : '#3d3d3a',
   };
   const mcHistogramFill = theme === 'dark' ? '#818cf8' : '#6366f1';
   const portfolioHistogramFill = theme === 'dark' ? '#c084fc' : '#a855f7';
@@ -201,7 +202,7 @@ const ResultsView = () => {
             className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center gap-2 ${
               copied
                 ? 'bg-emerald-500 text-white shadow-emerald-100'
-                : 'bg-white text-indigo-600 border border-indigo-200 hover:bg-indigo-50 shadow-sm'
+                : 'bg-white text-indigo-600 border border-indigo-200 hover:bg-indigo-50 shadow-sm dark:bg-surface-dark-elevated dark:text-indigo-300 dark:border-slate-600 dark:hover:bg-slate-700'
             }`}
           >
             {copied ? (
@@ -274,7 +275,7 @@ const ResultsView = () => {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
           <h2 className="text-heading-2">자산 성장 차트</h2>
           <div className="flex flex-wrap items-center gap-3">
-            <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+            <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer dark:text-slate-300">
               <input
                 type="checkbox"
                 checked={useLogScale}
@@ -283,7 +284,7 @@ const ResultsView = () => {
               />
               로그 스케일
             </label>
-            <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+            <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer dark:text-slate-300">
               <input
                 type="checkbox"
                 checked={useRealAsset}
@@ -292,7 +293,7 @@ const ResultsView = () => {
               />
               실질가치
             </label>
-            <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+            <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer dark:text-slate-300">
               <input
                 type="checkbox"
                 checked={useHouseInChart}
@@ -302,7 +303,7 @@ const ResultsView = () => {
               주택 포함
             </label>
             {hasMonteCarloBand && (
-              <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+              <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer dark:text-slate-300">
                 <input
                   type="checkbox"
                   checked={showMCBands}
@@ -324,6 +325,7 @@ const ResultsView = () => {
           retirementPlan={retirementPlan}
           personRetireYear={you.retireYear}
           spouseRetireYear={marriagePlan.spouse?.retireYear || you.retireYear}
+          jepqFinancialIndependenceYear={jepqFinancialIndependenceYear}
           useLogScale={useLogScale}
           useRealAsset={useRealAsset}
           inflationRate={retirementPlan.inflationRate || 2}
@@ -340,7 +342,7 @@ const ResultsView = () => {
         {/* Resize Handle */}
         <div
           onPointerDown={startWealthChartResize}
-          className="h-3 w-full cursor-row-resize rounded bg-gray-100 border border-gray-200 hover:bg-gray-200 transition-colors mt-2 flex items-center justify-center"
+          className="h-3 w-full cursor-row-resize rounded bg-gray-100 border border-gray-200 hover:bg-gray-200 transition-colors mt-2 flex items-center justify-center dark:bg-slate-800 dark:border-slate-700 dark:hover:bg-slate-700"
         >
           <div className="w-8 h-1 bg-gray-300 rounded" />
         </div>
@@ -351,7 +353,7 @@ const ResultsView = () => {
         <section className="grid grid-cols-1 gap-6">
           {/* S&P500 Monte Carlo Results */}
           {mcResult && (
-            <div className="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-xl p-5 border-2 border-indigo-200 shadow-sm">
+            <div className="bg-surface-soft rounded-xl p-5 border border-hairline shadow-sm dark:bg-surface-dark-soft dark:border-slate-700">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-full bg-indigo-500 flex items-center justify-center text-white text-lg">
                   🎲
@@ -363,25 +365,25 @@ const ResultsView = () => {
               </div>
               
               <div className="grid grid-cols-2 gap-3 mb-4">
-                <div className="p-3 rounded-lg bg-white/80 border border-indigo-100">
+                <div className="p-3 rounded-lg bg-white/80 border border-hairline dark:bg-surface-dark-elevated/80 dark:border-slate-700">
                   <div className="text-xs text-gray-500">5% (워스트)</div>
                   <div className="text-xl font-bold text-indigo-700">
                     {formatEok(mcSummary?.p5)}
                   </div>
                 </div>
-                <div className="p-3 rounded-lg bg-white/80 border border-indigo-100">
+                <div className="p-3 rounded-lg bg-white/80 border border-hairline dark:bg-surface-dark-elevated/80 dark:border-slate-700">
                   <div className="text-xs text-gray-500">50% (중앙값)</div>
                   <div className="text-xl font-bold text-indigo-900">
                     {formatEok(mcSummary?.p50)}
                   </div>
                 </div>
-                <div className="p-3 rounded-lg bg-white/80 border border-indigo-100">
+                <div className="p-3 rounded-lg bg-white/80 border border-hairline dark:bg-surface-dark-elevated/80 dark:border-slate-700">
                   <div className="text-xs text-gray-500">95% (베스트)</div>
                   <div className="text-xl font-bold text-emerald-600">
                     {formatEok(mcSummary?.p95)}
                   </div>
                 </div>
-                <div className="p-3 rounded-lg bg-white/80 border border-indigo-100">
+                <div className="p-3 rounded-lg bg-white/80 border border-hairline dark:bg-surface-dark-elevated/80 dark:border-slate-700">
                   <div className="text-xs text-gray-500">파산 확률</div>
                   <div className="text-xl font-bold text-red-600">
                     {formatPercent(mcSummary?.belowZeroProbability)}
@@ -406,7 +408,7 @@ const ResultsView = () => {
                 <div className="text-xs text-gray-500">{mcYear}년 후</div>
               </div>
               {mcHistogramData.length > 0 && (
-                <div className="mt-3 h-56 bg-white/60 rounded-lg p-2">
+                <div className="mt-3 h-56 bg-white/60 rounded-lg p-2 dark:bg-surface-dark-elevated/60">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={mcHistogramData} margin={{ top: 10, right: 10, left: 0, bottom: 40 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
@@ -446,7 +448,7 @@ const ResultsView = () => {
 
           {/* Portfolio Monte Carlo Results */}
           {portfolio?.enabled && portfolioMcResult && (
-            <div className="bg-gradient-to-br from-purple-50 to-fuchsia-50 rounded-xl p-5 border-2 border-purple-200 shadow-sm">
+            <div className="bg-surface-soft rounded-xl p-5 border border-hairline shadow-sm dark:bg-surface-dark-soft dark:border-slate-700">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-full bg-purple-500 flex items-center justify-center text-white text-lg">
                   📊
@@ -458,25 +460,25 @@ const ResultsView = () => {
               </div>
               
               <div className="grid grid-cols-2 gap-3 mb-4">
-                <div className="p-3 rounded-lg bg-white/80 border border-purple-100">
+                <div className="p-3 rounded-lg bg-white/80 border border-hairline dark:bg-surface-dark-elevated/80 dark:border-slate-700">
                   <div className="text-xs text-gray-500">10% (보수적)</div>
                   <div className="text-xl font-bold text-purple-700">
                     {formatEok(portfolioMcResult.percentiles?.p10?.[portfolioMcYear])}
                   </div>
                 </div>
-                <div className="p-3 rounded-lg bg-white/80 border border-purple-100">
+                <div className="p-3 rounded-lg bg-white/80 border border-hairline dark:bg-surface-dark-elevated/80 dark:border-slate-700">
                   <div className="text-xs text-gray-500">50% (중앙값)</div>
                   <div className="text-xl font-bold text-purple-900">
                     {formatEok(portfolioMcResult.percentiles?.p50?.[portfolioMcYear])}
                   </div>
                 </div>
-                <div className="p-3 rounded-lg bg-white/80 border border-purple-100">
+                <div className="p-3 rounded-lg bg-white/80 border border-hairline dark:bg-surface-dark-elevated/80 dark:border-slate-700">
                   <div className="text-xs text-gray-500">90% (낙관적)</div>
                   <div className="text-xl font-bold text-emerald-600">
                     {formatEok(portfolioMcResult.percentiles?.p90?.[portfolioMcYear])}
                   </div>
                 </div>
-                <div className="p-3 rounded-lg bg-white/80 border border-purple-100">
+                <div className="p-3 rounded-lg bg-white/80 border border-hairline dark:bg-surface-dark-elevated/80 dark:border-slate-700">
                   <div className="text-xs text-gray-500">기대수익률</div>
                   <div className="text-xl font-bold text-purple-600">
                     {portfolioRate.toFixed(1)}%
@@ -501,7 +503,7 @@ const ResultsView = () => {
                   <div className="text-xs text-gray-500">{portfolioMcYear}년 후</div>
                 </div>
                 {portfolioMcHistogramData.length > 0 && (
-                  <div className="mt-3 h-56 bg-white/60 rounded-lg p-2">
+                  <div className="mt-3 h-56 bg-white/60 rounded-lg p-2 dark:bg-surface-dark-elevated/60">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={portfolioMcHistogramData} margin={{ top: 10, right: 10, left: 0, bottom: 40 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
@@ -539,7 +541,7 @@ const ResultsView = () => {
 
               {/* Portfolio MC Chart */}
               {portfolioMcChartData.length > 0 && (
-                <div className="bg-white/60 rounded-lg p-2" style={{ height: portfolioMcChartHeight }}>
+                <div className="bg-white/60 rounded-lg p-2 dark:bg-surface-dark-elevated/60" style={{ height: portfolioMcChartHeight }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <ComposedChart data={portfolioMcChartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                       <defs>
@@ -621,22 +623,22 @@ const ResultsView = () => {
 
       {/* MC Comparison Guide */}
       {mcResult && portfolio?.enabled && portfolioMcResult && (
-        <section className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+        <section className="bg-surface-card border border-hairline rounded-xl p-4 dark:bg-surface-dark-elevated dark:border-slate-700">
           <h3 className="font-semibold text-amber-800 mb-2 flex items-center gap-2">
             <span>💡</span> 두 몬테카를로 시뮬레이션의 차이
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-            <div className="bg-white/70 rounded-lg p-3 border border-indigo-100">
-              <div className="font-semibold text-indigo-700 mb-1">🎲 S&P500 몬테카를로</div>
-              <ul className="text-gray-600 text-xs space-y-1">
+            <div className="bg-white/70 rounded-lg p-3 border border-hairline dark:bg-surface-dark-soft/70 dark:border-slate-700">
+              <div className="font-semibold text-indigo-700 mb-1 dark:text-indigo-300">🎲 S&P500 몬테카를로</div>
+              <ul className="text-gray-600 text-xs space-y-1 dark:text-slate-300">
                 <li>• <strong>과거 데이터:</strong> 1975~2024 실제 S&P500 수익률 사용</li>
                 <li>• <strong>이벤트 반영:</strong> 결혼, 주택구매, 대출상환, 은퇴 인출 모두 포함</li>
                 <li>• <strong>용도:</strong> 실제 인생 계획의 리스크 분석</li>
               </ul>
             </div>
             <div className="bg-white/70 rounded-lg p-3 border border-purple-100">
-              <div className="font-semibold text-purple-700 mb-1">📊 포트폴리오 몬테카를로</div>
-              <ul className="text-gray-600 text-xs space-y-1">
+              <div className="font-semibold text-purple-700 mb-1 dark:text-purple-300">📊 포트폴리오 몬테카를로</div>
+              <ul className="text-gray-600 text-xs space-y-1 dark:text-slate-300">
                 <li>• <strong>변동성 모델:</strong> 정규분포 기반 포트폴리오 변동성 시뮬레이션</li>
                 <li>• <strong>이벤트 미반영:</strong> 단순 적립만 계산 (결혼/주택/은퇴 제외)</li>
                 <li>• <strong>용도:</strong> 자산 배분 전략의 수익률 범위 분석</li>
@@ -648,10 +650,10 @@ const ResultsView = () => {
 
       {/* Summary Info */}
       <section className="section-amber rounded-xl p-4">
-        <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+        <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2 dark:text-slate-100">
           <span>📋</span> 상세 정보
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-700">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-700 dark:text-slate-300">
           <div>
             <h4 className="font-semibold mb-2">{you.name} (본인)</h4>
             <ul className="space-y-1">

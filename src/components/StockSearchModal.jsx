@@ -36,11 +36,11 @@ const StockSearchModal = ({ isOpen, onClose, onAddStock }) => {
   const latestInfoRequestRef = useRef(0);
 
   const chartColors = {
-    axis: theme === 'dark' ? '#475569' : '#e5e7eb',
-    tick: theme === 'dark' ? '#cbd5e1' : '#6b7280',
-    tooltipBg: theme === 'dark' ? 'rgba(15, 23, 42, 0.95)' : 'rgba(255, 255, 255, 0.95)',
-    tooltipBorder: theme === 'dark' ? '#334155' : '#e5e7eb',
-    tooltipText: theme === 'dark' ? '#e2e8f0' : '#374151',
+    axis: theme === 'dark' ? '#4a463f' : '#e6dfd8',
+    tick: theme === 'dark' ? '#c9c5bd' : '#6c6a64',
+    tooltipBg: theme === 'dark' ? 'rgba(24, 23, 21, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+    tooltipBorder: theme === 'dark' ? '#3a3733' : '#e6dfd8',
+    tooltipText: theme === 'dark' ? '#dedad2' : '#3d3d3a',
   };
 
   // 검색 실행 함수
@@ -440,7 +440,7 @@ const StockSearchModal = ({ isOpen, onClose, onAddStock }) => {
                         onChange={(e) => setAllocation(parseInt(e.target.value))}
                         className="flex-1 h-2 rounded-lg appearance-none cursor-pointer"
                         style={{
-                          background: `linear-gradient(to right, ${stockInfo.color} 0%, ${stockInfo.color} ${allocation}%, #e5e7eb ${allocation}%, #e5e7eb 100%)`,
+                          background: `linear-gradient(to right, ${stockInfo.color} 0%, ${stockInfo.color} ${allocation}%, #e6dfd8 ${allocation}%, #e6dfd8 100%)`,
                         }}
                       />
                       <div className="w-20 flex items-center gap-1">

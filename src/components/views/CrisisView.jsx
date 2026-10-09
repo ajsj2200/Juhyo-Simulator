@@ -31,22 +31,22 @@ const CrisisView = () => {
     SP500_YEARS,
     mcResult,
     clearSp500MonteCarlo,
-    theme,
+    resolvedTheme: theme,
   } = useSimulator();
 
   const [exclusiveModalOpen, setExclusiveModalOpen] = useState(false);
 
   const chartColors = {
-    grid: theme === 'dark' ? '#334155' : '#e5e7eb',
-    axis: theme === 'dark' ? '#475569' : '#e5e7eb',
-    tick: theme === 'dark' ? '#cbd5e1' : '#6b7280',
-    tooltipBg: theme === 'dark' ? 'rgba(15, 23, 42, 0.95)' : 'rgba(255, 255, 255, 0.95)',
-    tooltipBorder: theme === 'dark' ? '#334155' : '#e5e7eb',
-    tooltipText: theme === 'dark' ? '#e2e8f0' : '#374151',
-    tooltipCursor: theme === 'dark' ? 'rgba(148, 163, 184, 0.12)' : 'rgba(99, 102, 241, 0.06)',
-    zeroLine: theme === 'dark' ? '#64748b' : '#94a3b8',
+    grid: theme === 'dark' ? '#3a3733' : '#e6dfd8',
+    axis: theme === 'dark' ? '#4a463f' : '#e6dfd8',
+    tick: theme === 'dark' ? '#c9c5bd' : '#6c6a64',
+    tooltipBg: theme === 'dark' ? 'rgba(24, 23, 21, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+    tooltipBorder: theme === 'dark' ? '#3a3733' : '#e6dfd8',
+    tooltipText: theme === 'dark' ? '#dedad2' : '#3d3d3a',
+    tooltipCursor: theme === 'dark' ? 'rgba(160, 157, 150, 0.12)' : 'rgba(99, 102, 241, 0.06)',
+    zeroLine: theme === 'dark' ? '#6c6a64' : '#a09d96',
     highlight: theme === 'dark' ? '#4ade80' : '#16a34a',
-    line: theme === 'dark' ? '#60a5fa' : '#2563eb',
+    line: theme === 'dark' ? '#d69275' : '#cc785c',
     barPositive: theme === 'dark' ? '#22c55e' : '#86efac',
     barNegative: theme === 'dark' ? '#f87171' : '#fca5a5',
     barPositiveActive: theme === 'dark' ? '#4ade80' : '#16a34a',

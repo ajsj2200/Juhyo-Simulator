@@ -1,0 +1,10 @@
+node_modules
+dist
+release
+.git
+.github
+.claude
+Dockerfile*
+docker-compose*.yml
+npm-debug.log*
+.DS_Store

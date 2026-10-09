@@ -407,7 +407,7 @@ const PortfolioSection = ({ portfolio, setPortfolio }) => {
                         onChange={(e) => handleAllocationChange(key, parseInt(e.target.value))}
                         className="flex-1 h-2 rounded-lg appearance-none cursor-pointer"
                         style={{
-                          background: `linear-gradient(to right, ${info.color} 0%, ${info.color} ${localAllocations[key]}%, #e5e7eb ${localAllocations[key]}%, #e5e7eb 100%)`,
+                          background: `linear-gradient(to right, ${info.color} 0%, ${info.color} ${localAllocations[key]}%, #e6dfd8 ${localAllocations[key]}%, #e6dfd8 100%)`,
                         }}
                       />
                       <div className="w-12 text-right text-sm font-bold" style={{ color: info.color }}>
@@ -478,7 +478,7 @@ const PortfolioSection = ({ portfolio, setPortfolio }) => {
                         onChange={(e) => handleCustomStockAllocationChange(stock.ticker, parseInt(e.target.value))}
                         className="flex-1 h-2 rounded-lg appearance-none cursor-pointer"
                         style={{
-                          background: `linear-gradient(to right, ${stock.color} 0%, ${stock.color} ${stock.allocation}%, #e5e7eb ${stock.allocation}%, #e5e7eb 100%)`,
+                          background: `linear-gradient(to right, ${stock.color} 0%, ${stock.color} ${stock.allocation}%, #e6dfd8 ${stock.allocation}%, #e6dfd8 100%)`,
                         }}
                       />
                       <div className="w-12 text-right text-sm font-bold" style={{ color: stock.color }}>

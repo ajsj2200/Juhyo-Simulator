@@ -8,23 +8,23 @@ const Card = ({
 }) => {
   const baseClasses = 'rounded-xl transition-all duration-200';
 
+  // 디자인 가이드: 크림/크림카드/다크 3-서피스 체계. 색상 변형은 크림 강도 차이로만 표현.
+  const creamCard =
+    'bg-surface-soft border border-hairline dark:bg-surface-dark-soft dark:border-slate-700';
+
   const variantClasses = {
     default:
-      'bg-white/90 backdrop-blur-sm border border-gray-100 shadow-sm dark:bg-slate-900/80 dark:border-slate-700',
-    solid: 'bg-white border border-gray-200 shadow-sm dark:bg-slate-900 dark:border-slate-700',
+      'bg-white/90 backdrop-blur-sm border border-hairline shadow-sm dark:bg-surface-dark-elevated/80 dark:border-slate-700',
+    solid: 'bg-white border border-hairline shadow-sm dark:bg-surface-dark-elevated dark:border-slate-700',
     ghost: 'bg-transparent',
-    blue:
-      'bg-gradient-to-br from-blue-50 to-blue-100/50 border-2 border-blue-200 dark:from-slate-900/70 dark:to-slate-800/50 dark:border-slate-700',
-    pink:
-      'bg-gradient-to-br from-pink-50 to-purple-50 border-2 border-pink-200 dark:from-slate-900/70 dark:to-slate-800/50 dark:border-slate-700',
-    green:
-      'bg-gradient-to-br from-green-50 to-teal-50 border-2 border-green-200 dark:from-slate-900/70 dark:to-slate-800/50 dark:border-slate-700',
-    purple:
-      'bg-gradient-to-br from-purple-50 to-indigo-50 border-2 border-purple-200 dark:from-slate-900/70 dark:to-slate-800/50 dark:border-slate-700',
+    blue: creamCard,
+    pink: creamCard,
+    green: creamCard,
+    purple: creamCard,
     amber:
-      'bg-gradient-to-br from-amber-50 to-orange-50 border-2 border-amber-200 dark:from-slate-900/70 dark:to-slate-800/50 dark:border-slate-700',
+      'bg-surface-card border border-hairline dark:bg-surface-dark-elevated dark:border-slate-700',
     red:
-      'bg-gradient-to-br from-red-50 to-rose-50 border-2 border-red-200 dark:from-slate-900/70 dark:to-slate-800/50 dark:border-slate-700',
+      'bg-red-50/60 border border-red-200 dark:bg-rose-500/10 dark:border-rose-500/30',
   };
 
   const paddingClasses = {

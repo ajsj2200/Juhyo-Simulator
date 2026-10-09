@@ -4,16 +4,16 @@ import InputGroup from '../InputGroup';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 
 const LoanView = () => {
-  const { loanCalc, setLoanCalc, loanCalcResult, loanChartData, theme } = useSimulator();
+  const { loanCalc, setLoanCalc, loanCalcResult, loanChartData, resolvedTheme: theme } = useSimulator();
 
   const chartColors = {
-    grid: theme === 'dark' ? '#334155' : '#e5e7eb',
-    axis: theme === 'dark' ? '#475569' : '#e5e7eb',
-    tick: theme === 'dark' ? '#cbd5e1' : '#6b7280',
-    tooltipBg: theme === 'dark' ? 'rgba(15, 23, 42, 0.95)' : 'rgba(255, 255, 255, 0.95)',
-    tooltipBorder: theme === 'dark' ? '#334155' : '#e5e7eb',
-    tooltipText: theme === 'dark' ? '#e2e8f0' : '#374151',
-    nominalLine: theme === 'dark' ? '#60a5fa' : '#2563eb',
+    grid: theme === 'dark' ? '#3a3733' : '#e6dfd8',
+    axis: theme === 'dark' ? '#4a463f' : '#e6dfd8',
+    tick: theme === 'dark' ? '#c9c5bd' : '#6c6a64',
+    tooltipBg: theme === 'dark' ? 'rgba(24, 23, 21, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+    tooltipBorder: theme === 'dark' ? '#3a3733' : '#e6dfd8',
+    tooltipText: theme === 'dark' ? '#dedad2' : '#3d3d3a',
+    nominalLine: theme === 'dark' ? '#d69275' : '#cc785c',
     realLine: theme === 'dark' ? '#fdba74' : '#f97316',
   };
 

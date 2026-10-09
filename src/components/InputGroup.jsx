@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 
-const InputGroup = ({ label, value, onChange, unit }) => {
+const InputGroup = ({ label, value, onChange, unit, type = 'number' }) => {
+  const isText = type === 'text';
   const [inputValue, setInputValue] = useState(String(value));
 
   // 외부 value가 바뀌면 동기화
@@ -13,6 +14,12 @@ const InputGroup = ({ label, value, onChange, unit }) => {
     // 아무 문자나 일단 허용 (타이핑 중)
     setInputValue(raw);
 
+    // 텍스트 입력은 입력값을 그대로 반영
+    if (isText) {
+      onChange(raw);
+      return;
+    }
+
     // 유효한 숫자면 바로 반영
     const num = parseFloat(raw);
     if (!isNaN(num)) {
@@ -21,6 +28,9 @@ const InputGroup = ({ label, value, onChange, unit }) => {
   };
 
   const handleBlur = () => {
+    // 텍스트 입력은 정리할 것이 없음
+    if (isText) return;
+
     // 포커스 잃을 때 숫자로 정리
     const num = parseFloat(inputValue);
     if (isNaN(num)) {
@@ -39,7 +49,7 @@ const InputGroup = ({ label, value, onChange, unit }) => {
       <div className="flex items-center gap-2">
         <input
           type="text"
-          inputMode="decimal"
+          inputMode={isText ? 'text' : 'decimal'}
           value={inputValue}
           onChange={handleChange}
           onBlur={handleBlur}

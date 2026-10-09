@@ -45,14 +45,14 @@ const DashboardView = () => {
         />
         <StatCard
           title="추월 시점"
-          value={crossoverYear !== null ? `${crossoverYear}년` : '-'}
-          subtitle={crossoverYear !== null ? '후 역전' : '이미 우위'}
+          value={crossoverYear === null ? '-' : crossoverYear === 0 ? '시작부터' : `${crossoverYear}년`}
+          subtitle={crossoverYear === null ? '기간 내 추월 없음' : crossoverYear === 0 ? '우위 유지' : '후 역전'}
           color="purple"
         />
       </section>
 
       {/* Quick Insights */}
-      <section className="section-amber rounded-xl p-4 dark:from-slate-900/80 dark:to-slate-800/70 dark:border-slate-700">
+      <section className="section-amber rounded-xl p-4">
         <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2 dark:text-slate-100">
           <span>💡</span> 핵심 인사이트
         </h3>
@@ -88,7 +88,7 @@ const DashboardView = () => {
       <section>
         <h3 className="text-heading-3 mb-3 dark:text-slate-100">현재 설정 상태</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="p-4 bg-pink-50 rounded-lg border border-pink-200 dark:bg-slate-900/60 dark:border-slate-700">
+          <div className="p-4 bg-surface-soft rounded-lg border border-hairline dark:bg-surface-dark-soft dark:border-slate-700">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-xl">💒</span>
               <span className="font-semibold text-gray-800 dark:text-slate-100">결혼/주택</span>
@@ -107,7 +107,7 @@ const DashboardView = () => {
             </div>
           </div>
 
-          <div className="p-4 bg-green-50 rounded-lg border border-green-200 dark:bg-slate-900/60 dark:border-slate-700">
+          <div className="p-4 bg-surface-soft rounded-lg border border-hairline dark:bg-surface-dark-soft dark:border-slate-700">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-xl">🏖️</span>
               <span className="font-semibold text-gray-800 dark:text-slate-100">은퇴 계획</span>
@@ -124,7 +124,7 @@ const DashboardView = () => {
             </div>
           </div>
 
-          <div className="p-4 bg-blue-50 rounded-lg border border-blue-200 dark:bg-slate-900/60 dark:border-slate-700">
+          <div className="p-4 bg-surface-soft rounded-lg border border-hairline dark:bg-surface-dark-soft dark:border-slate-700">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-xl">📊</span>
               <span className="font-semibold text-gray-800 dark:text-slate-100">시뮬레이션</span>

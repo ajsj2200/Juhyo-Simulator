@@ -4,7 +4,7 @@ import Header from './Header';
 
 const AppLayout = ({ children, onCopyResults }) => {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 dark:from-slate-900 dark:via-slate-950 dark:to-slate-800">
+    <div className="min-h-screen bg-canvas dark:bg-surface-dark">
       {/* Desktop Sidebar */}
       <Sidebar />
 

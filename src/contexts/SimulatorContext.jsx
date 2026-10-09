@@ -38,7 +38,7 @@ import {
   runMonteCarloPlan,
 } from '../utils/calculations';
 import { linearRegression } from '../utils/assetTracking';
-import { getInitialTheme, getNextTheme, THEME_STORAGE_KEY } from '../utils/theme';
+import { getInitialTheme, getNextTheme, resolveTheme, THEME_STORAGE_KEY } from '../utils/theme';
 
 const LOCAL_PRESET_KEY = 'vooAppCustomPresetsV1';
 const ASSET_RECORDS_STORAGE_KEY = 'voo-app-asset-records';
@@ -245,6 +245,46 @@ export const SimulatorProvider = ({ children }) => {
       matchMedia: getBrowserMatchMedia(),
     })
   );
+  // 'system'을 실제 light/dark로 해석한 값. 차트 색상 등 JS 레벨 분기에 사용.
+  const [resolvedTheme, setResolvedTheme] = useState(() =>
+    resolveTheme(
+      getInitialTheme({ storage: getBrowserStorage(), matchMedia: getBrowserMatchMedia() }),
+      getBrowserMatchMedia()
+    )
+  );
+
+  // 테마 적용: html.dark 클래스 토글 + resolvedTheme 동기화 (system이면 OS 설정 변화 추적)
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined;
+    const root = document.documentElement;
+    const matchMedia = getBrowserMatchMedia();
+
+    const applyTheme = () => {
+      const resolved = resolveTheme(theme, matchMedia);
+      root.classList.toggle('dark', resolved === 'dark');
+      setResolvedTheme(resolved);
+    };
+
+    applyTheme();
+
+    if (theme !== 'system' || !matchMedia) return undefined;
+    const mediaQuery = matchMedia('(prefers-color-scheme: dark)');
+    if (!mediaQuery) return undefined;
+
+    const handleChange = () => applyTheme();
+
+    if (mediaQuery.addEventListener) {
+      mediaQuery.addEventListener('change', handleChange);
+      return () => mediaQuery.removeEventListener('change', handleChange);
+    }
+
+    if (mediaQuery.addListener) {
+      mediaQuery.addListener(handleChange);
+      return () => mediaQuery.removeListener(handleChange);
+    }
+
+    return undefined;
+  }, [theme]);
 
   // Historical Mode
   const [useHistoricalReturns, setUseHistoricalReturns] = useState(false);
@@ -252,9 +292,30 @@ export const SimulatorProvider = ({ children }) => {
   const [useExchangeRate, setUseExchangeRate] = useState(false);
 
   // Asset Tracking (자산 추적)
-  const [assetRecords, setAssetRecords] = useState([]);
+  // lazy 초기화 필수: 마운트 후 로드하면 저장 effect가 초기 빈 값을 먼저 써버려
+  // StrictMode 이중 실행 시 저장된 기록이 통째로 유실된다.
+  const [assetRecords, setAssetRecords] = useState(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const saved = localStorage.getItem(ASSET_RECORDS_STORAGE_KEY);
+      const parsed = saved ? JSON.parse(saved) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      console.error('Failed to load asset records:', e);
+      return [];
+    }
+  });
   const [showActualAssets, setShowActualAssets] = useState(true);
-  const [trackedStockPortfolio, setTrackedStockPortfolio] = useState(DEFAULT_TRACKED_STOCK_PORTFOLIO);
+  const [trackedStockPortfolio, setTrackedStockPortfolio] = useState(() => {
+    if (typeof window === 'undefined') return DEFAULT_TRACKED_STOCK_PORTFOLIO;
+    try {
+      const saved = localStorage.getItem(TRACKED_STOCK_PORTFOLIO_STORAGE_KEY);
+      return saved ? normalizeTrackedStockPortfolio(JSON.parse(saved)) : DEFAULT_TRACKED_STOCK_PORTFOLIO;
+    } catch (e) {
+      console.error('Failed to load tracked stock portfolio:', e);
+      return DEFAULT_TRACKED_STOCK_PORTFOLIO;
+    }
+  });
 
   // Loan Calculator
   const [loanCalc, setLoanCalc] = useState({
@@ -274,18 +335,6 @@ export const SimulatorProvider = ({ children }) => {
   // Active View (for navigation)
   const [activeView, setActiveView] = useState('dashboard');
 
-  // Load asset records from localStorage
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(ASSET_RECORDS_STORAGE_KEY);
-      if (saved) {
-        setAssetRecords(JSON.parse(saved));
-      }
-    } catch (e) {
-      console.error('Failed to load asset records:', e);
-    }
-  }, []);
-
   // Save asset records to localStorage
   useEffect(() => {
     try {
@@ -294,17 +343,6 @@ export const SimulatorProvider = ({ children }) => {
       console.error('Failed to save asset records:', e);
     }
   }, [assetRecords]);
-
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(TRACKED_STOCK_PORTFOLIO_STORAGE_KEY);
-      if (saved) {
-        setTrackedStockPortfolio(normalizeTrackedStockPortfolio(JSON.parse(saved)));
-      }
-    } catch (e) {
-      console.error('Failed to load tracked stock portfolio:', e);
-    }
-  }, []);
 
   useEffect(() => {
     try {
@@ -325,7 +363,6 @@ export const SimulatorProvider = ({ children }) => {
   const toggleTheme = useCallback(() => {
     setTheme((currentTheme) => {
       const nextTheme = getNextTheme(currentTheme);
-      console.log('Theme toggle:', currentTheme, '→', nextTheme);
       const storage = getBrowserStorage();
       if (storage?.setItem) {
         try {
@@ -995,6 +1032,24 @@ export const SimulatorProvider = ({ children }) => {
     return purchaseYear + marriagePlan.loanYears;
   }, [marriagePlan]);
 
+  // JEPQ 배당금만으로 생활비 충당 가능 시점 (없으면 null)
+  const jepqFinancialIndependenceYear = useMemo(() => {
+    if (!retirementPlan.enabled || !retirementPlan.useJEPQ) return null;
+
+    for (let year = 0; year <= years; year++) {
+      const assetInManwon = (chartData[year]?.you || 0) * 10000;
+      const jepqPortion = assetInManwon * (retirementPlan.jepqRatio / 100);
+      const monthlyDividend = (jepqPortion * (retirementPlan.jepqDividendRate / 100)) / 12;
+
+      const yearsFromRetire = year >= effectiveRetireYear ? year - effectiveRetireYear : 0;
+      const adjustedExpense =
+        retirementPlan.monthlyExpense * Math.pow(1 + retirementPlan.inflationRate / 100, yearsFromRetire);
+
+      if (monthlyDividend >= adjustedExpense) return year;
+    }
+    return null;
+  }, [chartData, years, retirementPlan, effectiveRetireYear]);
+
   // Savings rate calculations
   const youSavingsRate = useMemo(() => {
     if (you.salary <= 0) return 0;
@@ -1059,6 +1114,7 @@ export const SimulatorProvider = ({ children }) => {
     mcResult,
     mcAccumulateKey,
     generateMonteCarloSeed,
+    portfolio.mcHistoricalRange,
   ]);
 
   const clearSp500MonteCarlo = useCallback(() => {
@@ -1403,6 +1459,7 @@ ${chartDataWithMonteCarlo.map((data, idx) => {
     copyTimeoutId,
     useHistoricalReturns,
     historicalStartYear,
+    useExchangeRate,
   ]);
 
   const applyPreset = useCallback(
@@ -1475,6 +1532,7 @@ ${chartDataWithMonteCarlo.map((data, idx) => {
     useHouseInChart,
     useHistoricalReturns,
     historicalStartYear,
+    useExchangeRate,
   ]);
 
   const handleDeletePreset = useCallback(
@@ -1545,6 +1603,9 @@ ${chartDataWithMonteCarlo.map((data, idx) => {
     if (cloned.historicalStartYear !== undefined) {
       setHistoricalStartYear(cloned.historicalStartYear);
     }
+    if (cloned.useExchangeRate !== undefined) {
+      setUseExchangeRate(cloned.useExchangeRate);
+    }
     setActivePresetId(preset.id);
     setPreviewPreset(null);
   }, []);
@@ -1571,6 +1632,7 @@ ${chartDataWithMonteCarlo.map((data, idx) => {
             useHouseInChart,
             useHistoricalReturns,
             historicalStartYear,
+            useExchangeRate,
           },
         };
       }
@@ -1595,6 +1657,7 @@ ${chartDataWithMonteCarlo.map((data, idx) => {
     useHouseInChart,
     useHistoricalReturns,
     historicalStartYear,
+    useExchangeRate,
   ]);
 
   const handleExportPresets = useCallback(() => {
@@ -1665,9 +1728,9 @@ ${chartDataWithMonteCarlo.map((data, idx) => {
     addDiff('투자 기간', orig.years, years, '년');
 
     // 나의 정보
-    addDiff('본인 월 투자액', orig.you.monthly, you.monthly, '만원');
-    addDiff('본인 수익률', orig.you.rate, you.rate, '%');
-    addDiff('본인 초기자산', orig.you.initial, you.initial, '만원');
+    addDiff('본인 월 투자액', orig.you?.monthly, you.monthly, '만원');
+    addDiff('본인 수익률', orig.you?.rate, you.rate, '%');
+    addDiff('본인 초기자산', orig.you?.initial, you.initial, '만원');
     if (JSON.stringify(orig.you?.adjustments || []) !== JSON.stringify(you?.adjustments || [])) {
       diffs.push({
         field: '본인 투자 변경 스케줄',
@@ -1678,8 +1741,8 @@ ${chartDataWithMonteCarlo.map((data, idx) => {
     }
 
     // 상대방 정보
-    addDiff('상대방 월 투자액(기본)', orig.other.monthly, other.monthly, '만원');
-    addDiff('상대방 수익률(기본)', orig.other.rate, other.rate, '%');
+    addDiff('상대방 월 투자액(기본)', orig.other?.monthly, other.monthly, '만원');
+    addDiff('상대방 수익률(기본)', orig.other?.rate, other.rate, '%');
     if (JSON.stringify(orig.other?.adjustments || []) !== JSON.stringify(other?.adjustments || [])) {
       diffs.push({
         field: '상대방 투자 변경 스케줄',
@@ -1690,30 +1753,30 @@ ${chartDataWithMonteCarlo.map((data, idx) => {
     }
 
     // 결혼/주택
-    if (orig.marriagePlan.enabled !== marriagePlan.enabled) {
-      addDiff('결혼 계획 활성화', orig.marriagePlan.enabled ? 'O' : 'X', marriagePlan.enabled ? 'O' : 'X');
+    if (orig.marriagePlan?.enabled !== marriagePlan.enabled) {
+      addDiff('결혼 계획 활성화', orig.marriagePlan?.enabled ? 'O' : 'X', marriagePlan.enabled ? 'O' : 'X');
     }
     
     // 배우자 정보 (결혼 계획)
-    addDiff('배우자 이름', orig.marriagePlan.spouse?.name, marriagePlan.spouse?.name, '');
-    addDiff('배우자 월급', orig.marriagePlan.spouse?.salary, marriagePlan.spouse?.salary, '만원');
-    addDiff('배우자 생활비', orig.marriagePlan.spouse?.expense, marriagePlan.spouse?.expense, '만원');
-    addDiff('배우자 월 투자액(결혼)', orig.marriagePlan.spouse?.monthly, marriagePlan.spouse?.monthly, '만원');
-    addDiff('배우자 투자액 증가율', orig.marriagePlan.spouse?.monthlyGrowthRate, marriagePlan.spouse?.monthlyGrowthRate, '%');
-    addDiff('배우자 수익률(결혼)', orig.marriagePlan.spouse?.rate, marriagePlan.spouse?.rate, '%');
-    addDiff('배우자 초기자산(결혼)', orig.marriagePlan.spouse?.initial, marriagePlan.spouse?.initial, '만원');
+    addDiff('배우자 이름', orig.marriagePlan?.spouse?.name, marriagePlan.spouse?.name, '');
+    addDiff('배우자 월급', orig.marriagePlan?.spouse?.salary, marriagePlan.spouse?.salary, '만원');
+    addDiff('배우자 생활비', orig.marriagePlan?.spouse?.expense, marriagePlan.spouse?.expense, '만원');
+    addDiff('배우자 월 투자액(결혼)', orig.marriagePlan?.spouse?.monthly, marriagePlan.spouse?.monthly, '만원');
+    addDiff('배우자 투자액 증가율', orig.marriagePlan?.spouse?.monthlyGrowthRate, marriagePlan.spouse?.monthlyGrowthRate, '%');
+    addDiff('배우자 수익률(결혼)', orig.marriagePlan?.spouse?.rate, marriagePlan.spouse?.rate, '%');
+    addDiff('배우자 초기자산(결혼)', orig.marriagePlan?.spouse?.initial, marriagePlan.spouse?.initial, '만원');
 
-    if (JSON.stringify(orig.marriagePlan.spouse?.adjustments || []) !== JSON.stringify(marriagePlan.spouse?.adjustments || [])) {
+    if (JSON.stringify(orig.marriagePlan?.spouse?.adjustments || []) !== JSON.stringify(marriagePlan.spouse?.adjustments || [])) {
       diffs.push({
         field: '배우자 투자 변경 스케줄',
-        old: formatAdjustments(orig.marriagePlan.spouse?.adjustments),
+        old: formatAdjustments(orig.marriagePlan?.spouse?.adjustments),
         new: formatAdjustments(marriagePlan.spouse?.adjustments),
         unit: '',
       });
     }
     
-    addDiff('집 가격', orig.marriagePlan.housePrice, marriagePlan.housePrice, '만원');
-    addDiff('대출 금액', orig.marriagePlan.loanAmount, marriagePlan.loanAmount, '만원');
+    addDiff('집 가격', orig.marriagePlan?.housePrice, marriagePlan.housePrice, '만원');
+    addDiff('대출 금액', orig.marriagePlan?.loanAmount, marriagePlan.loanAmount, '만원');
 
     // 포트폴리오 (기본)
     Object.keys(ASSET_INFO).forEach(key => {
@@ -1829,6 +1892,7 @@ ${chartDataWithMonteCarlo.map((data, idx) => {
     portfolioMcChartHeight,
     setPortfolioMcChartHeight,
     theme,
+    resolvedTheme,
     toggleTheme,
 
     // Historical mode
@@ -1881,6 +1945,7 @@ ${chartDataWithMonteCarlo.map((data, idx) => {
     netHouseEquity,
     finalFinancialAssets,
     loanCompletionYear,
+    jepqFinancialIndependenceYear,
     retireYearAsset,
     effectiveRetireYear,
     youSavingsRate,

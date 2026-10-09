@@ -122,11 +122,9 @@ const MarriagePlanSection = ({ marriagePlan, setMarriagePlan, personMonthly }) =
 
               <InputGroup
                 label="배우자 이름"
+                type="text"
                 value={marriagePlan.spouse.name}
                 onChange={(v) => updateSpouse({ name: v })}
-                min={0}
-                max={500}
-                step={10}
                 unit=""
               />
 

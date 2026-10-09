@@ -3,40 +3,111 @@
 /* Enable dark mode variant */
 @variant dark (.dark &);
 
+/*
+ * Anthropic/Claude 디자인 언어 (DESIGN-claude.md)
+ * - 크림 캔버스(#faf9f5) + 코랄 액센트(#cc785c) + 웜 다크 서피스(#181715)
+ * - 기존 코드의 gray/slate/blue 유틸리티가 그대로 웜 팔레트로 렌더되도록
+ *   Tailwind 스케일 자체를 리맵한다 (파일별 수작업 재도색 대신 토큰 레벨 치환).
+ *   gray → 웜 뉴트럴(ink/body/muted/hairline 계열)
+ *   slate → 웜 다크 서피스 계열 (dark: 변형에서 주로 사용됨)
+ *   blue → 코랄 계열 (브랜드 액센트)
+ */
+@theme {
+  /* Brand tokens */
+  --color-canvas: #faf9f5;
+  --color-ink: #141413;
+  --color-coral: #cc785c;
+  --color-coral-active: #a9583e;
+  --color-hairline: #e6dfd8;
+  --color-hairline-soft: #ebe6df;
+  --color-surface-soft: #f5f0e8;
+  --color-surface-card: #efe9de;
+  --color-surface-cream-strong: #e8e0d2;
+  --color-surface-dark: #181715;
+  --color-surface-dark-elevated: #252320;
+  --color-surface-dark-soft: #1f1e1b;
+  --color-on-dark: #faf9f5;
+  --color-on-dark-soft: #a09d96;
+  --color-accent-teal: #5db8a6;
+  --color-accent-amber: #e8a55a;
+
+  /* gray → warm neutral (ink/body/muted/hairline) */
+  --color-gray-50: #faf9f5;
+  --color-gray-100: #f5f0e8;
+  --color-gray-200: #e6dfd8;
+  --color-gray-300: #d5cec2;
+  --color-gray-400: #8e8b82;
+  --color-gray-500: #6c6a64;
+  --color-gray-600: #55534c;
+  --color-gray-700: #3d3d3a;
+  --color-gray-800: #252523;
+  --color-gray-900: #141413;
+  --color-gray-950: #0d0d0c;
+
+  /* slate → warm dark surfaces (dark: 변형용) */
+  --color-slate-50: #faf9f5;
+  --color-slate-100: #f0ede6;
+  --color-slate-200: #dedad2;
+  --color-slate-300: #c9c5bd;
+  --color-slate-400: #a09d96;
+  --color-slate-500: #6c6a64;
+  --color-slate-600: #4a463f;
+  --color-slate-700: #3a3733;
+  --color-slate-800: #252320;
+  --color-slate-900: #181715;
+  --color-slate-950: #100f0d;
+
+  /* blue → coral (브랜드 액센트) */
+  --color-blue-50: #f7ede7;
+  --color-blue-100: #f0e0d6;
+  --color-blue-200: #e4c7b6;
+  --color-blue-300: #dcb39e;
+  --color-blue-400: #d69275;
+  --color-blue-500: #cc785c;
+  --color-blue-600: #a9583e;
+  --color-blue-700: #8f4a34;
+  --color-blue-800: #703a29;
+  --color-blue-900: #57301f;
+  --color-blue-950: #3b2015;
+
+  /* 세리프 디스플레이 (Copernicus 대체: Noto Serif KR) */
+  --font-display: 'Noto Serif KR', 'Tiempos Headline', Georgia, 'Times New Roman', serif;
+}
+
 /* Custom CSS Variables / Design Tokens */
 :root {
   /* Primary Colors */
-  --color-primary: #2563eb;
-  --color-primary-light: #3b82f6;
-  --color-primary-dark: #1d4ed8;
+  --color-primary: #cc785c;
+  --color-primary-light: #d69275;
+  --color-primary-dark: #a9583e;
 
   /* Secondary Colors */
-  --color-secondary: #dc2626;
+  --color-secondary: #c64545;
   --color-secondary-light: #ef4444;
 
   /* Accent Colors */
   --color-marriage: #ec4899;
-  --color-retirement: #10b981;
+  --color-retirement: #5db872;
   --color-portfolio: #8b5cf6;
-  --color-crisis: #f59e0b;
+  --color-crisis: #e8a55a;
 
   /* Neutral */
-  --color-text: #1f2937;
-  --color-text-muted: #6b7280;
-  --color-border: #e5e7eb;
+  --color-text: #3d3d3a;
+  --color-text-muted: #6c6a64;
+  --color-border: #e6dfd8;
 
   /* Theme Surfaces */
-  --bg-primary: #f8fafc;
+  --bg-primary: #faf9f5;
   --bg-secondary: #ffffff;
-  --text-primary: #0f172a;
-  --text-secondary: #475569;
-  --border-color: #e2e8f0;
+  --text-primary: #141413;
+  --text-secondary: #55534c;
+  --border-color: #e6dfd8;
   --card-bg: #ffffff;
 
   /* Shadows */
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-sm: 0 1px 3px rgb(20 20 19 / 0.08);
+  --shadow-md: 0 4px 6px -1px rgb(20 20 19 / 0.08), 0 2px 4px -2px rgb(20 20 19 / 0.08);
+  --shadow-lg: 0 10px 15px -3px rgb(20 20 19 / 0.08), 0 4px 6px -4px rgb(20 20 19 / 0.08);
 
   /* Spacing */
   --spacing-xs: 0.25rem;
@@ -58,18 +129,19 @@
 }
 
 .dark {
-  --bg-primary: #0f172a;
-  --bg-secondary: #111827;
-  --text-primary: #f8fafc;
-  --text-secondary: #cbd5f5;
-  --border-color: #334155;
-  --card-bg: #1e293b;
+  --bg-primary: #181715;
+  --bg-secondary: #1f1e1b;
+  --text-primary: #faf9f5;
+  --text-secondary: #c9c5bd;
+  --border-color: #3a3733;
+  --card-bg: #252320;
 }
 
 /* Base Typography */
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  color: var(--color-text);
+  color: var(--text-primary);
+  background-color: var(--bg-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -93,157 +165,194 @@ body {
   background: #94a3b8;
 }
 
-/* Card Styles */
-.card {
-  @apply bg-white/90 backdrop-blur-sm rounded-xl border border-gray-100 shadow-sm;
+.dark ::-webkit-scrollbar-thumb {
+  background: #475569;
 }
 
-.card-hover {
-  @apply hover:shadow-md hover:border-gray-200 transition-all duration-200;
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
 }
 
-.card-section {
-  @apply bg-white rounded-xl border border-gray-100 shadow-sm p-6;
-}
+/*
+ * 컴포넌트 클래스는 반드시 @layer components 안에 둔다.
+ * 레이어 밖(unlayered) CSS는 utilities 레이어보다 항상 우선되기 때문에,
+ * 밖에 두면 컴포넌트에 붙인 dark:*, text-* 같은 유틸리티 오버라이드가 전부 무시된다.
+ */
+@layer components {
+  /* Card Styles */
+  .card {
+    @apply bg-white/90 backdrop-blur-sm rounded-xl border border-hairline shadow-sm
+           dark:bg-surface-dark-elevated/80 dark:border-slate-700;
+  }
 
-/* Section Color Variants */
-.section-blue {
-  @apply bg-gradient-to-br from-blue-50 to-blue-100/50 border-2 border-blue-200;
-}
+  .card-hover {
+    @apply hover:shadow-md hover:border-gray-300 transition-all duration-200 dark:hover:border-slate-600;
+  }
 
-.section-pink {
-  @apply bg-gradient-to-br from-pink-50 to-purple-50 border-2 border-pink-200;
-}
+  .card-section {
+    @apply bg-white rounded-xl border border-hairline shadow-sm p-6 dark:bg-surface-dark-elevated dark:border-slate-700;
+  }
 
-.section-green {
-  @apply bg-gradient-to-br from-green-50 to-teal-50 border-2 border-green-200;
-}
+  /*
+   * Section Variants — 디자인 가이드의 3-서피스 원칙(크림/크림카드/다크)에 따라
+   * 무지개 그라데이션 대신 모두 크림 카드로 통일. 이름은 호환성 위해 유지.
+   */
+  .section-blue,
+  .section-pink,
+  .section-green,
+  .section-purple {
+    @apply bg-surface-soft border border-hairline
+           dark:bg-surface-dark-soft dark:border-slate-700;
+  }
 
-.section-purple {
-  @apply bg-gradient-to-br from-purple-50 to-indigo-50 border-2 border-purple-200;
-}
+  .section-amber {
+    @apply bg-surface-card border border-hairline
+           dark:bg-surface-dark-elevated dark:border-slate-700;
+  }
 
-.section-amber {
-  @apply bg-gradient-to-br from-amber-50 to-orange-50 border-2 border-amber-200;
-}
+  /* Button Styles */
+  .btn {
+    @apply px-4 py-2 rounded-lg font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-canvas dark:focus:ring-offset-surface-dark;
+  }
 
-/* Button Styles */
-.btn {
-  @apply px-4 py-2 rounded-lg font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2;
-}
+  .btn-primary {
+    @apply bg-coral hover:bg-coral-active text-white focus:ring-coral disabled:opacity-50 disabled:cursor-not-allowed;
+  }
 
-.btn-primary {
-  @apply bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-500;
-}
+  .btn-secondary {
+    @apply bg-canvas hover:bg-surface-soft text-ink border border-hairline focus:ring-gray-400
+           dark:bg-surface-dark-elevated dark:hover:bg-slate-700 dark:text-slate-200 dark:border-slate-600;
+  }
 
-.btn-secondary {
-  @apply bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-200 focus:ring-gray-400;
-}
+  .btn-ghost {
+    @apply text-gray-600 hover:bg-surface-soft focus:ring-gray-400 dark:text-slate-300 dark:hover:bg-slate-800;
+  }
 
-.btn-ghost {
-  @apply text-gray-600 hover:bg-gray-100 focus:ring-gray-400;
-}
+  .btn-danger {
+    @apply text-red-600 hover:bg-red-50 border border-red-200 focus:ring-red-400
+           dark:text-rose-300 dark:hover:bg-rose-500/10 dark:border-rose-500/40;
+  }
 
-.btn-danger {
-  @apply text-red-600 hover:bg-red-50 border border-red-200 focus:ring-red-400;
-}
+  /* Input Styles */
+  .input {
+    @apply w-full px-3 py-2 bg-white border border-hairline rounded-lg text-ink
+           focus:ring-2 focus:ring-coral/30 focus:border-coral
+           transition-shadow duration-150
+           dark:bg-surface-dark-elevated dark:border-slate-600 dark:text-slate-100 dark:placeholder-slate-500;
+  }
 
-/* Input Styles */
-.input {
-  @apply w-full px-3 py-2 border border-gray-300 rounded-lg
-         focus:ring-2 focus:ring-blue-500 focus:border-transparent
-         transition-shadow duration-150;
-}
+  .input-sm {
+    @apply px-2 py-1.5 text-sm;
+  }
 
-.input-sm {
-  @apply px-2 py-1.5 text-sm;
-}
+  /* Typography — 디스플레이/헤딩은 세리프(Copernicus 대체), 본문은 산세리프 */
+  .text-display {
+    @apply font-display text-3xl md:text-4xl font-medium tracking-tight text-ink dark:text-on-dark;
+  }
 
-/* Typography */
-.text-display {
-  @apply text-3xl md:text-4xl font-bold tracking-tight text-gray-900;
-}
+  .text-heading-1 {
+    @apply font-display text-2xl md:text-3xl font-medium tracking-tight text-ink dark:text-on-dark;
+  }
 
-.text-heading-1 {
-  @apply text-2xl font-bold text-gray-800;
-}
+  .text-heading-2 {
+    @apply font-display text-xl md:text-2xl font-medium tracking-tight text-ink dark:text-on-dark;
+  }
 
-.text-heading-2 {
-  @apply text-xl font-semibold text-gray-800;
-}
+  .text-heading-3 {
+    @apply text-lg font-semibold text-gray-700 dark:text-slate-200;
+  }
 
-.text-heading-3 {
-  @apply text-lg font-semibold text-gray-700;
-}
+  .text-body {
+    @apply text-base text-gray-600 dark:text-slate-300;
+  }
 
-.text-body {
-  @apply text-base text-gray-600;
-}
+  .text-caption {
+    @apply text-sm text-gray-500 dark:text-slate-400;
+  }
 
-.text-caption {
-  @apply text-sm text-gray-500;
-}
+  .text-stat {
+    @apply text-2xl md:text-3xl font-extrabold tabular-nums;
+  }
 
-.text-stat {
-  @apply text-2xl md:text-3xl font-extrabold tabular-nums;
-}
+  /* Navigation */
+  .nav-item {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-600
+           hover:bg-gray-100 hover:text-gray-900 transition-colors duration-150
+           dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100;
+  }
 
-/* Navigation */
-.nav-item {
-  @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-600
-         hover:bg-gray-100 hover:text-gray-900 transition-colors duration-150;
-}
+  .nav-item-active {
+    @apply bg-blue-50 text-blue-700 font-medium dark:bg-slate-800 dark:text-blue-200;
+  }
 
-.nav-item-active {
-  @apply bg-blue-50 text-blue-700 font-medium;
-}
+  .nav-item-icon {
+    @apply w-5 h-5 flex-shrink-0;
+  }
 
-.nav-item-icon {
-  @apply w-5 h-5 flex-shrink-0;
-}
+  /* Sidebar */
+  .sidebar {
+    @apply fixed left-0 top-0 h-screen w-64 bg-canvas/80 backdrop-blur-lg
+           border-r border-hairline overflow-y-auto z-40
+           dark:bg-surface-dark/80 dark:border-slate-800;
+  }
 
-/* Sidebar */
-.sidebar {
-  @apply fixed left-0 top-0 h-screen w-64 bg-white/80 backdrop-blur-lg
-         border-r border-gray-200 overflow-y-auto z-40;
-}
+  .sidebar-header {
+    @apply h-16 flex items-center px-4 border-b border-hairline-soft dark:border-slate-800;
+  }
 
-.sidebar-header {
-  @apply h-16 flex items-center px-4 border-b border-gray-100;
-}
+  .sidebar-content {
+    @apply p-4;
+  }
 
-.sidebar-content {
-  @apply p-4;
-}
+  /* Mobile Bottom Navigation */
+  .mobile-nav {
+    @apply fixed bottom-0 left-0 right-0 bg-canvas/90 backdrop-blur-lg
+           border-t border-hairline z-50 dark:bg-surface-dark/90 dark:border-slate-800;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
 
-/* Mobile Bottom Navigation */
-.mobile-nav {
-  @apply fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-lg
-         border-t border-gray-200 z-50;
-  padding-bottom: env(safe-area-inset-bottom, 0);
-}
+  .mobile-nav-item {
+    @apply flex flex-col items-center justify-center py-2 px-3
+           text-gray-500 hover:text-blue-600 transition-colors
+           dark:text-slate-400 dark:hover:text-blue-300;
+  }
 
-.mobile-nav-item {
-  @apply flex flex-col items-center justify-center py-2 px-3
-         text-gray-500 hover:text-blue-600 transition-colors;
-}
+  .mobile-nav-item-active {
+    @apply text-blue-600 dark:text-blue-300;
+  }
 
-.mobile-nav-item-active {
-  @apply text-blue-600;
-}
+  /* Main Content Area */
+  .main-content {
+    @apply lg:ml-64 min-h-screen bg-canvas dark:bg-surface-dark;
+  }
 
-/* Main Content Area */
-.main-content {
-  @apply lg:ml-64 min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50;
-}
+  .main-content-inner {
+    @apply p-4 lg:p-8 pb-24 lg:pb-8;
+  }
 
-.main-content-inner {
-  @apply p-4 lg:p-8 pb-24 lg:pb-8;
-}
+  /* Chart Container */
+  .chart-container {
+    @apply bg-white rounded-2xl border border-hairline shadow-sm p-4 lg:p-6
+           dark:bg-surface-dark-elevated dark:border-slate-700;
+  }
 
-/* Chart Container */
-.chart-container {
-  @apply bg-white rounded-2xl shadow-lg p-4 lg:p-6;
+  /* Collapsible Section */
+  .collapsible-header {
+    @apply w-full px-4 py-3 flex items-center justify-between
+           hover:bg-white/50 transition-colors cursor-pointer dark:hover:bg-slate-800/50;
+  }
+
+  .collapsible-content {
+    @apply overflow-hidden transition-all duration-300 ease-in-out;
+  }
+
+  .collapsible-content-open {
+    @apply max-h-[2000px] opacity-100;
+  }
+
+  .collapsible-content-closed {
+    @apply max-h-0 opacity-0;
+  }
 }
 
 /* Animations */
@@ -263,24 +372,6 @@ body {
 
 .animate-slide-in {
   animation: slideIn 0.3s ease-out;
-}
-
-/* Collapsible Section */
-.collapsible-header {
-  @apply w-full px-4 py-3 flex items-center justify-between
-         hover:bg-white/50 transition-colors cursor-pointer;
-}
-
-.collapsible-content {
-  @apply overflow-hidden transition-all duration-300 ease-in-out;
-}
-
-.collapsible-content-open {
-  @apply max-h-[2000px] opacity-100;
-}
-
-.collapsible-content-closed {
-  @apply max-h-0 opacity-0;
 }
 
 /* Safe area for mobile */

@@ -36,6 +36,14 @@ export const getNextTheme = (currentTheme) => {
   return 'light';
 };
 
+export const THEME_META = {
+  light: { icon: '☀️', label: '라이트' },
+  dark: { icon: '🌙', label: '다크' },
+  system: { icon: '💻', label: '시스템' },
+};
+
+export const getThemeMeta = (theme) => THEME_META[theme] || THEME_META.light;
+
 export const resolveTheme = (theme, matchMedia) => {
   if (theme === 'system') {
     return getPrefersDark(matchMedia) ? 'dark' : 'light';

@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { useSimulator } from '../../contexts/SimulatorContext';
+import { getThemeMeta, getNextTheme } from '../../utils/theme';
 
 const Header = ({ onCopyResults, className = '' }) => {
   const [copied, setCopied] = useState(false);
   const { activeView, setActiveView, theme, toggleTheme } = useSimulator();
 
-  const themeIcon = theme === 'dark' ? '☀️' : '🌙';
+  const themeMeta = getThemeMeta(theme);
+  const themeTitle = `테마: ${themeMeta.label} (클릭 시 ${getThemeMeta(getNextTheme(theme)).label})`;
 
   const handleCopy = async () => {
     if (onCopyResults) {
@@ -18,6 +20,7 @@ const Header = ({ onCopyResults, className = '' }) => {
   const getViewTitle = () => {
     const titles = {
       dashboard: '대시보드',
+      results: '결과/차트',
       profile: '내 정보',
       comparison: '비교 대상',
       marriage: '결혼/주택 계획',
@@ -26,6 +29,8 @@ const Header = ({ onCopyResults, className = '' }) => {
       montecarlo: '몬테카를로 시뮬레이션',
       crisis: '위기 시나리오',
       loan: '대출 계산기',
+      assetTracking: '자산 추적',
+      assetSalary: '자산 월급',
       presets: '프리셋 관리',
     };
     return titles[activeView] || '대시보드';
@@ -33,17 +38,17 @@ const Header = ({ onCopyResults, className = '' }) => {
 
   return (
     <header
-      className={`lg:hidden sticky top-0 z-30 bg-white/80 backdrop-blur-lg
-        border-b border-gray-200 dark:bg-slate-900/80 dark:border-slate-800 ${className}`}
+      className={`lg:hidden sticky top-0 z-30 bg-canvas/80 backdrop-blur-lg
+        border-b border-hairline dark:bg-surface-dark/80 dark:border-slate-800 ${className}`}
     >
       <div className="flex items-center justify-between px-4 h-14">
         {/* Mobile Menu Button */}
         <button
           onClick={() => setActiveView('dashboard')}
-          className="flex items-center gap-2 text-gray-800 dark:text-slate-100"
+          className="flex items-center gap-2 text-ink dark:text-on-dark"
         >
-          <span className="text-xl">💰</span>
-          <span className="font-semibold text-sm">{getViewTitle()}</span>
+          <span className="text-xl" aria-hidden="true">✳</span>
+          <span className="font-display font-medium text-sm">{getViewTitle()}</span>
         </button>
 
         {/* Actions */}
@@ -51,15 +56,16 @@ const Header = ({ onCopyResults, className = '' }) => {
           <button
             type="button"
             onClick={toggleTheme}
-            aria-label="테마 전환"
+            aria-label={themeTitle}
+            title={themeTitle}
             className="
-              w-9 h-9 flex items-center justify-center rounded-lg border border-gray-200
-              bg-white/80 text-gray-700 transition-colors duration-150
-              hover:bg-gray-100 dark:border-slate-700 dark:bg-slate-800
+              w-9 h-9 flex items-center justify-center rounded-full border border-hairline
+              bg-canvas/80 text-ink transition-colors duration-150
+              hover:bg-surface-soft dark:border-slate-700 dark:bg-surface-dark-elevated
               dark:text-slate-200 dark:hover:bg-slate-700
             "
           >
-            <span aria-hidden="true">{themeIcon}</span>
+            <span aria-hidden="true">{themeMeta.icon}</span>
           </button>
           <button
             onClick={handleCopy}
@@ -67,8 +73,8 @@ const Header = ({ onCopyResults, className = '' }) => {
               px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200
               ${
                 copied
-                  ? 'bg-green-500 text-white'
-                  : 'bg-blue-500 hover:bg-blue-600 text-white'
+                  ? 'bg-green-600 text-white'
+                  : 'bg-coral hover:bg-coral-active text-white'
               }
             `}
           >

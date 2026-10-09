@@ -70,7 +70,7 @@ export const ASSET_INFO = {
     stdDev: 16.5, // 연간 표준편차 (%)
     volatility: 'high',
     dividendYield: 1.5,
-    color: '#2563eb', // blue-600
+    color: '#cc785c', // blue-600
   },
   schd: {
     name: 'SCHD',

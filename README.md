@@ -35,10 +35,64 @@ npm run dev
 ```
 → http://localhost:5173
 
+주식/환율 자동 조회는 기본적으로 브라우저 fetch + 로컬 캐시로 동작합니다.
+더 안정적인 운용이 필요하면 선택적으로 Cloudflare Worker 프록시를 붙일 수 있습니다.
+
+```bash
+VITE_FINANCE_PROXY_URL=https://your-worker.your-subdomain.workers.dev npm run dev
+```
+
 ### 린트
 ```bash
 npm run lint
 ```
+
+## Docker
+프로덕션 웹 버전을 컨테이너로 실행할 수 있습니다. Electron 앱은 Docker 대상이 아니고, 정적 웹 빌드를 Nginx로 서빙합니다.
+
+### Docker Compose로 계속 실행
+```bash
+docker compose up -d --build
+```
+
+→ http://localhost:8080
+
+- `restart: unless-stopped`가 설정되어 있어서 Docker 데몬 재시작 후에도 자동으로 다시 올라옵니다.
+- 8080 포트가 이미 사용 중이면 다음처럼 바꿔서 실행할 수 있습니다.
+  ```bash
+  VOO_APP_PORT=8081 docker compose up -d --build
+  ```
+- 중지:
+  ```bash
+  docker compose down
+  ```
+
+### Docker 이미지 직접 빌드/실행
+```bash
+docker build -t juhyo-simulator .
+docker run -d --name juhyo-simulator --restart unless-stopped -p 8080:80 juhyo-simulator
+```
+
+## Cloudflare Worker 금융 프록시
+
+브라우저 기본 경로는 캐시 + 재시도 방식으로 동작합니다. 더 안정성이 필요하면 `cloudflare/finance-proxy` Worker를 선택적으로 붙일 수 있습니다.
+
+### 배포
+```bash
+cd cloudflare/finance-proxy
+npx wrangler deploy
+```
+
+배포 후 나온 Worker URL을 `VITE_FINANCE_PROXY_URL`로 넣으면 앱이 그 프록시를 우선 사용합니다.
+
+### 제공 라우트
+- `POST /api/finance/search`
+- `GET /api/finance/chart?symbol=VOO&interval=1d&range=1y`
+- `GET /api/fx/usdkrw`
+
+### 참고
+- Worker가 Yahoo/FX 응답을 edge cache 하므로 기본 브라우저 경로보다 더 안정적으로 운용할 수 있습니다.
+- 프록시를 설정하지 않으면 앱은 브라우저 fetch + 로컬 캐시 + 주기적 재시도 경로로 동작합니다.
 
 ## Electron
 - 개발

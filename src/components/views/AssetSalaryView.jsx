@@ -124,15 +124,15 @@ const AssetSalaryView = () => {
     portfolio,
     portfolioRate,
     assetRecords,
-    theme,
+    resolvedTheme: theme,
   } = useSimulator();
 
   const isDark = theme === 'dark';
   const chartColors = {
-    grid: isDark ? '#334155' : '#e5e7eb',
-    axis: isDark ? '#475569' : '#e5e7eb',
-    tick: isDark ? '#cbd5e1' : '#6b7280',
-    salary: isDark ? '#38bdf8' : '#2563eb',
+    grid: isDark ? '#3a3733' : '#e6dfd8',
+    axis: isDark ? '#4a463f' : '#e6dfd8',
+    tick: isDark ? '#c9c5bd' : '#6c6a64',
+    salary: isDark ? '#e0a58e' : '#cc785c',
     actual: isDark ? '#f59e0b' : '#d97706',
     target: isDark ? '#fb7185' : '#e11d48',
     mcMedian: isDark ? '#c084fc' : '#9333ea',

@@ -1,41 +1,6 @@
 import { useSimulator } from '../../contexts/SimulatorContext';
-
-const navItems = [
-  { id: 'dashboard', icon: '📊', label: '대시보드' },
-  { id: 'results', icon: '📈', label: '결과/차트' },
-  { id: 'profile', icon: '👤', label: '내 정보' },
-  { id: 'comparison', icon: '⚖️', label: '비교 대상' },
-  {
-    id: 'plans',
-    icon: '📋',
-    label: '인생 계획',
-    children: [
-      { id: 'marriage', icon: '💒', label: '결혼/주택' },
-      { id: 'retirement', icon: '🏖️', label: '은퇴 계획' },
-    ],
-  },
-  {
-    id: 'advanced',
-    icon: '⚙️',
-    label: '고급 설정',
-    children: [
-      { id: 'portfolio', icon: '📦', label: '포트폴리오' },
-      { id: 'montecarlo', icon: '🎲', label: '몬테카를로' },
-      { id: 'crisis', icon: '⚠️', label: '위기 시나리오' },
-    ],
-  },
-  {
-    id: 'tools',
-    icon: '🧮',
-    label: '도구',
-    children: [
-      { id: 'loan', icon: '🏦', label: '대출 계산기' },
-      { id: 'assetTracking', icon: '📈', label: '자산 추적' },
-      { id: 'assetSalary', icon: '💸', label: '자산 월급' },
-      { id: 'presets', icon: '💾', label: '프리셋 관리' },
-    ],
-  },
-];
+import { getThemeMeta, getNextTheme } from '../../utils/theme';
+import { navItems } from './navItems';
 
 const NavItem = ({ item, activeView, onViewChange, level = 0 }) => {
   const isActive = activeView === item.id;
@@ -83,38 +48,41 @@ const NavItem = ({ item, activeView, onViewChange, level = 0 }) => {
 
 const Sidebar = ({ className = '' }) => {
   const { activeView, setActiveView, theme, toggleTheme } = useSimulator();
-  
-  const themeIcon = theme === 'dark' ? '☀️' : '🌙';
+
+  const themeMeta = getThemeMeta(theme);
+  const nextThemeMeta = getThemeMeta(getNextTheme(theme));
+  const themeTitle = `테마: ${themeMeta.label} (클릭 시 ${nextThemeMeta.label})`;
 
   return (
     <aside
-      className={`hidden lg:block fixed left-0 top-0 h-screen w-64
-        bg-white/80 backdrop-blur-lg border-r border-gray-200
-        dark:bg-slate-900/80 dark:border-slate-800
-        overflow-y-auto z-40 ${className}`}
+      className={`hidden lg:flex flex-col fixed left-0 top-0 h-screen w-64
+        bg-canvas/90 backdrop-blur-lg border-r border-hairline
+        dark:bg-surface-dark/90 dark:border-slate-800
+        z-40 ${className}`}
     >
       {/* Header */}
-      <div className="h-16 flex items-center justify-between px-4 border-b border-gray-100 dark:border-slate-800">
-        <h1 className="text-lg font-bold text-gray-800 dark:text-slate-100">
-          💰 인생 시뮬레이터
+      <div className="h-16 shrink-0 flex items-center justify-between px-4 border-b border-hairline-soft dark:border-slate-800">
+        <h1 className="font-display text-lg font-medium tracking-tight text-ink dark:text-on-dark">
+          ✳ 인생 시뮬레이터
         </h1>
         <button
           type="button"
           onClick={toggleTheme}
-          aria-label="테마 전환"
+          aria-label={themeTitle}
+          title={themeTitle}
           className="
-            w-9 h-9 flex items-center justify-center rounded-lg border border-gray-200
-            bg-white text-gray-700 transition-colors duration-150
-            hover:bg-gray-100 dark:border-slate-700 dark:bg-slate-800
+            w-9 h-9 flex items-center justify-center rounded-full border border-hairline
+            bg-canvas text-ink transition-colors duration-150
+            hover:bg-surface-soft dark:border-slate-700 dark:bg-surface-dark-elevated
             dark:text-slate-200 dark:hover:bg-slate-700
           "
         >
-          <span aria-hidden="true">{themeIcon}</span>
+          <span aria-hidden="true">{themeMeta.icon}</span>
         </button>
       </div>
 
       {/* Navigation */}
-      <nav className="p-4 space-y-1">
+      <nav className="flex-1 overflow-y-auto p-4 space-y-1">
         {navItems.map((item) => (
           <NavItem
             key={item.id}
@@ -126,7 +94,7 @@ const Sidebar = ({ className = '' }) => {
       </nav>
 
       {/* Footer */}
-      <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-100 bg-white/50 dark:border-slate-800 dark:bg-slate-900/60">
+      <div className="shrink-0 p-4 border-t border-hairline-soft bg-canvas/50 dark:border-slate-800 dark:bg-surface-dark/60">
         <div className="text-xs text-gray-500 text-center dark:text-slate-400">
           주효 인생 시뮬레이터 v1.0
         </div>
